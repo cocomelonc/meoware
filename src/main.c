@@ -35,10 +35,13 @@ static HWND g_run_button;
 static HWND g_restore_button;
 static HWND g_note_button;
 static HFONT g_font_title;
+static HFONT g_font_countdown;
 static HFONT g_font_heading;
 static HFONT g_font_body;
 static HFONT g_font_small;
 static HFONT g_font_mono;
+static HWND g_hover_button;
+static WNDPROC g_button_proc;
 static ULONGLONG g_deadline;
 static ULONGLONG g_started;
 static bool g_timer_running;
@@ -48,18 +51,20 @@ static LogEntry g_log[LOG_CAPACITY];
 static unsigned int g_log_count;
 
 enum {
-  COLOR_BG = RGB(250, 249, 252),
-  COLOR_PANEL = RGB(255, 255, 255),
-  COLOR_PANEL_ALT = RGB(241, 237, 251),
-  COLOR_BORDER = RGB(228, 222, 245),
-  COLOR_TEXT = RGB(36, 31, 51),
-  COLOR_MUTED = RGB(111, 106, 133),
-  COLOR_ACCENT = RGB(124, 58, 237),
-  COLOR_ACCENT_DARK = RGB(91, 33, 182),
-  COLOR_TEAL = RGB(5, 150, 105),
-  COLOR_RED = RGB(220, 38, 38),
-  COLOR_TRACK = RGB(232, 225, 250),
-  COLOR_SHADOW = RGB(245, 242, 251)
+  COLOR_BG = RGB(247, 245, 250),
+  COLOR_PANEL = RGB(255, 254, 255),
+  COLOR_PANEL_ALT = RGB(239, 233, 247),
+  COLOR_BORDER = RGB(227, 220, 236),
+  COLOR_TEXT = RGB(57, 49, 70),
+  COLOR_MUTED = RGB(112, 102, 124),
+  COLOR_ACCENT = RGB(119, 91, 158),
+  COLOR_ACCENT_DARK = RGB(94, 68, 130),
+  COLOR_TEAL = RGB(52, 116, 98),
+  COLOR_RED = RGB(164, 70, 94),
+  COLOR_MINT = RGB(229, 243, 236),
+  COLOR_ROSE = RGB(250, 233, 237),
+  COLOR_TRACK = RGB(233, 226, 241),
+  COLOR_SHADOW = RGB(237, 232, 243)
 };
 
 static COLORREF state_color(void) {
@@ -76,9 +81,9 @@ static COLORREF state_tint(void) {
   switch (g_state) {
   case DEMO_RUNNING:
   case DEMO_EXPIRED:
-  case DEMO_ERROR: return RGB(254, 226, 226);
-  case DEMO_RESTORED: return RGB(220, 252, 231);
-  default: return RGB(237, 233, 254);
+  case DEMO_ERROR: return COLOR_ROSE;
+  case DEMO_RESTORED: return COLOR_MINT;
+  default: return COLOR_PANEL_ALT;
   }
 }
 
@@ -192,6 +197,30 @@ static void set_font(HDC dc, HFONT font) {
   if (font != NULL) SelectObject(dc, font);
 }
 
+static HFONT create_mono_font(int height, int weight) {
+  HDC dc = GetDC(NULL);
+  const char *faces[] = { "Consolas", "Courier New" };
+  HFONT font = NULL;
+  unsigned int i;
+
+  for (i = 0; i < sizeof(faces) / sizeof(faces[0]); ++i) {
+    char actual_face[LF_FACESIZE] = { 0 };
+    HGDIOBJ previous;
+    font = CreateFontA(-height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+      CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, faces[i]);
+    if (font == NULL || dc == NULL) break;
+    previous = SelectObject(dc, font);
+    GetTextFaceA(dc, sizeof(actual_face), actual_face);
+    SelectObject(dc, previous);
+    if (lstrcmpiA(actual_face, faces[i]) == 0 || i == 1) break;
+    DeleteObject(font);
+    font = NULL;
+  }
+  if (dc != NULL) ReleaseDC(NULL, dc);
+  return font;
+}
+
 static void draw_text(HDC dc, const char *text, int x, int y, int width, int height,
             COLORREF color, HFONT font, UINT format) {
   RECT rect = { x, y, x + width, y + height };
@@ -223,8 +252,8 @@ static void fill_rect(HDC dc, int x, int y, int width, int height, COLORREF colo
 }
 
 static void draw_card(HDC dc, int x, int y, int width, int height) {
-  fill_round_rect(dc, x + 1, y + 3, width, height, 15, COLOR_SHADOW, COLOR_SHADOW);
-  fill_round_rect(dc, x, y, width, height, 15, COLOR_PANEL, COLOR_BORDER);
+  fill_round_rect(dc, x, y + 3, width, height, 22, COLOR_SHADOW, COLOR_SHADOW);
+  fill_round_rect(dc, x, y, width, height, 22, COLOR_PANEL, COLOR_BORDER);
 }
 
 static void draw_status_dot(HDC dc, int x, int y, COLORREF color) {
@@ -250,25 +279,25 @@ static void draw_dashboard(HWND window, HDC dc) {
 
   GetClientRect(window, &client);
   client_width = client.right - client.left;
-  right_x = client_width - 28 - 430;
+  right_x = client_width - 28 - 500;
   card_width = right_x - left_x - 20;
   if (card_width < 350) card_width = 350;
   if (right_x < left_x + card_width + 20) right_x = left_x + card_width + 20;
 
   fill_rect(dc, 0, 0, client_width, client.bottom, COLOR_BG);
 
-  fill_round_rect(dc, 29, 24, 42, 42, 12, COLOR_ACCENT, COLOR_ACCENT);
-  draw_text(dc, "M", 29, 28, 42, 33, RGB(255, 255, 255), g_font_heading,
+  fill_round_rect(dc, 29, 24, 44, 44, 16, COLOR_PANEL_ALT, COLOR_BORDER);
+  draw_text(dc, ":3", 29, 27, 44, 36, COLOR_ACCENT_DARK, g_font_heading,
         DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "MEOWARE", 84, 22, 260, 32, COLOR_TEXT, g_font_title,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "EDU  /  BEHAVIOR LAB", 86, 57, 430, 20,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   fill_round_rect(dc, client_width - 190, 31, 160, 30, 15,
-          RGB(220, 252, 231), RGB(220, 252, 231));
+          COLOR_MINT, COLOR_MINT);
   draw_status_dot(dc, client_width - 174, 42, COLOR_TEAL);
   draw_text(dc, "LOCAL DEMO", client_width - 158, 36, 116, 20,
-        RGB(22, 101, 52), g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        COLOR_TEAL, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   fill_rect(dc, 28, 83, client_width - 56, 1, COLOR_BORDER);
 
   draw_card(dc, left_x, 105, card_width, 156);
@@ -287,7 +316,7 @@ static void draw_dashboard(HWND window, HDC dc) {
     snprintf(countdown, sizeof(countdown), "24:00:00");
   }
   draw_text(dc, countdown, left_x + 20, 146, card_width - 40, 54,
-        COLOR_TEXT, g_font_title, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        COLOR_ACCENT_DARK, g_font_countdown, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, g_timer_running ? "Time remaining in this demonstration" : "A 24-hour behavior window starts with the demo",
         left_x + 23, 204, card_width - 46, 19, COLOR_MUTED, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -305,18 +334,18 @@ static void draw_dashboard(HWND window, HDC dc) {
             state_color(), state_color());
   }
 
-  draw_card(dc, right_x, 105, 430, 156);
-  draw_text(dc, "LAB STATUS", right_x + 22, 123, 385, 18,
+  draw_card(dc, right_x, 105, 500, 156);
+  draw_text(dc, "LAB STATUS", right_x + 22, 123, 456, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  fill_round_rect(dc, right_x + 21, 150, 385, 30, 15,
+  fill_round_rect(dc, right_x + 21, 150, 456, 30, 15,
           state_tint(), state_tint());
   draw_status_dot(dc, right_x + 33, 160, state_color());
-  draw_text(dc, state_text(), right_x + 50, 154, 345, 22,
+  draw_text(dc, state_text(), right_x + 50, 154, 420, 22,
         state_color(), g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "Scope", right_x + 23, 193, 60, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "5 bundled files  /  private temp folder  /  no network",
-        right_x + 85, 193, 320, 18, COLOR_TEXT, g_font_small,
+  draw_text(dc, "5 samples / private folder / offline",
+        right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "AES-256-CBC via Windows CNG", right_x + 23, 220, 380, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -330,19 +359,19 @@ static void draw_dashboard(HWND window, HDC dc) {
   for (i = 0; i < LAB_SAMPLE_COUNT; ++i) {
     int row_y = 431 + i * 35;
     COLORREF dot = COLOR_TEAL;
-    COLORREF tint = RGB(220, 252, 231);
+    COLORREF tint = COLOR_MINT;
     const char *status = "READY";
     if (g_state == DEMO_RUNNING) {
       dot = COLOR_RED;
-      tint = RGB(254, 226, 226);
+      tint = COLOR_ROSE;
       status = "ENCRYPTED";
     } else if (g_state == DEMO_RESTORED) {
       dot = COLOR_ACCENT_DARK;
-      tint = RGB(237, 233, 254);
+      tint = COLOR_PANEL_ALT;
       status = "RESTORED";
     } else if (g_state == DEMO_EXPIRED) {
       dot = COLOR_RED;
-      tint = RGB(254, 226, 226);
+      tint = COLOR_ROSE;
       status = "REMOVED";
     }
     draw_status_dot(dc, left_x + 23, row_y + 6, dot);
@@ -357,7 +386,7 @@ static void draw_dashboard(HWND window, HDC dc) {
     }
   }
 
-  draw_card(dc, right_x, 351, 430, 277);
+  draw_card(dc, right_x, 351, 500, 277);
   draw_text(dc, "ACTIVITY", right_x + 22, 369, 385, 23,
         COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "Local events from this session", right_x + 22, 394, 385, 18,
@@ -366,15 +395,17 @@ static void draw_dashboard(HWND window, HDC dc) {
     int row_y = 432 + i * 30;
     draw_text(dc, g_log[i].time, right_x + 22, row_y, 48, 20,
           COLOR_ACCENT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(dc, g_log[i].text, right_x + 78, row_y, 325, 24,
-          COLOR_TEXT, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    draw_text(dc, g_log[i].text, right_x + 78, row_y, 400, 28,
+          COLOR_TEXT, g_font_small, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
   }
 
-  draw_text(dc, "PRIVATE LAB", 30, 650, 95, 18, COLOR_TEAL, g_font_small,
+  fill_round_rect(dc, 28, 646, client_width - 56, 36, 12,
+          COLOR_PANEL_ALT, COLOR_PANEL_ALT);
+  draw_text(dc, "PRIVATE LAB", 42, 655, 100, 18, COLOR_ACCENT_DARK, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   snprintf(path_text, sizeof(path_text), "%s", g_lab_ready ? lab_directory(&g_lab) : "Lab folder unavailable");
-  draw_text(dc, path_text, 125, 650, client_width - 155, 18, COLOR_MUTED,
-        g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+  draw_text(dc, path_text, 152, 655, client_width - 198, 18, COLOR_MUTED,
+        g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
 }
 
 static void draw_button(const DRAWITEMSTRUCT *item)
@@ -383,49 +414,60 @@ static void draw_button(const DRAWITEMSTRUCT *item)
   RECT r = item->rcItem;
   bool disabled = (item->itemState & ODS_DISABLED) != 0;
   bool pressed = (item->itemState & ODS_SELECTED) != 0;
+  bool hovered = g_hover_button == item->hwndItem && !disabled;
   COLORREF fill;
   COLORREF border;
   COLORREF text_color;
   const char *label;
   int width = r.right - r.left;
   int height = r.bottom - r.top;
-  HBRUSH brush;
-  HPEN pen;
-  HGDIOBJ old_brush;
-  HGDIOBJ old_pen;
+
+  fill_rect(dc, r.left, r.top, width, height, COLOR_BG);
 
   if (item->CtlID == ID_RUN) {
-    fill = disabled ? COLOR_PANEL_ALT : COLOR_ACCENT;
+    fill = disabled ? COLOR_PANEL_ALT : (hovered ? COLOR_ACCENT_DARK : COLOR_ACCENT);
     border = disabled ? COLOR_BORDER : COLOR_ACCENT;
     text_color = disabled ? COLOR_MUTED : RGB(255, 255, 255);
     label = "Run demo";
   } else if (item->CtlID == ID_RESTORE) {
-    fill = disabled ? COLOR_PANEL : RGB(237, 233, 254);
-    border = disabled ? COLOR_BORDER : RGB(221, 214, 254);
+    fill = disabled ? COLOR_PANEL : (hovered ? COLOR_MINT : COLOR_PANEL_ALT);
+    border = disabled ? COLOR_BORDER : COLOR_ACCENT;
     text_color = disabled ? COLOR_MUTED : COLOR_ACCENT_DARK;
     label = "Restore samples";
   } else {
-    fill = pressed ? COLOR_PANEL_ALT : COLOR_PANEL;
+    fill = pressed || hovered ? COLOR_PANEL_ALT : COLOR_PANEL;
     border = COLOR_BORDER;
     text_color = disabled ? COLOR_MUTED : COLOR_TEXT;
     label = "View note";
   }
-  if (pressed && item->CtlID != ID_NOTE) fill = COLOR_ACCENT_DARK;
-  brush = CreateSolidBrush(fill);
-  pen = CreatePen(PS_SOLID, 1, border);
-  old_brush = SelectObject(dc, brush);
-  old_pen = SelectObject(dc, pen);
-  RoundRect(dc, r.left, r.top, r.right, r.bottom, 12, 12);
-  SelectObject(dc, old_brush);
-  SelectObject(dc, old_pen);
-  DeleteObject(brush);
-  DeleteObject(pen);
+  if (pressed && !disabled && item->CtlID != ID_NOTE) {
+    fill = COLOR_ACCENT_DARK;
+    text_color = RGB(255, 255, 255);
+  }
+  fill_round_rect(dc, r.left, r.top, width, height, 16, fill, border);
   SetBkMode(dc, TRANSPARENT);
   SetTextColor(dc, text_color);
-  set_font(dc, g_font_heading);
+  set_font(dc, g_font_body);
   DrawTextA(dc, label, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-  (void)width;
-  (void)height;
+  if ((item->itemState & ODS_FOCUS) && !(item->itemState & ODS_NOFOCUSRECT)) {
+    InflateRect(&r, -5, -5);
+    DrawFocusRect(dc, &r);
+  }
+}
+
+static LRESULT CALLBACK button_proc(HWND button, UINT message, WPARAM wparam, LPARAM lparam) {
+  if (message == WM_MOUSEMOVE && g_hover_button != button) {
+    TRACKMOUSEEVENT track = { sizeof(track), TME_LEAVE, button, 0 };
+    HWND previous = g_hover_button;
+    g_hover_button = button;
+    TrackMouseEvent(&track);
+    if (previous != NULL) InvalidateRect(previous, NULL, FALSE);
+    InvalidateRect(button, NULL, FALSE);
+  } else if (message == WM_MOUSELEAVE && g_hover_button == button) {
+    g_hover_button = NULL;
+    InvalidateRect(button, NULL, FALSE);
+  }
+  return CallWindowProcA(g_button_proc, button, message, wparam, lparam);
 }
 
 static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
@@ -435,14 +477,17 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
     char error[256];
 
     g_run_button = CreateWindowExA(0, "BUTTON", "Run demo",
-      WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 28, 286, 150, 44,
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160, 44,
       window, (HMENU)(INT_PTR)ID_RUN, GetModuleHandleA(NULL), NULL);
     g_restore_button = CreateWindowExA(0, "BUTTON", "Restore samples",
-      WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 190, 286, 180, 44,
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 200, 286, 200, 44,
       window, (HMENU)(INT_PTR)ID_RESTORE, GetModuleHandleA(NULL), NULL);
     g_note_button = CreateWindowExA(0, "BUTTON", "View note",
-      WS_CHILD | WS_VISIBLE | BS_OWNERDRAW, 382, 286, 140, 44,
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 412, 286, 160, 44,
       window, (HMENU)(INT_PTR)ID_NOTE, GetModuleHandleA(NULL), NULL);
+    g_button_proc = (WNDPROC)SetWindowLongPtrA(g_run_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+    SetWindowLongPtrA(g_restore_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+    SetWindowLongPtrA(g_note_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     EnableWindow(g_restore_button, FALSE);
     if (!lab_initialize(&g_lab, error, sizeof(error))) {
       show_error(window, error);
@@ -478,7 +523,21 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   case WM_PAINT: {
     PAINTSTRUCT paint;
     HDC dc = BeginPaint(window, &paint);
-    draw_dashboard(window, dc);
+    RECT client;
+    HDC buffer = CreateCompatibleDC(dc);
+    HBITMAP bitmap;
+    GetClientRect(window, &client);
+    bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
+    if (buffer != NULL && bitmap != NULL) {
+      HGDIOBJ previous = SelectObject(buffer, bitmap);
+      draw_dashboard(window, buffer);
+      BitBlt(dc, 0, 0, client.right, client.bottom, buffer, 0, 0, SRCCOPY);
+      SelectObject(buffer, previous);
+    } else {
+      draw_dashboard(window, dc);
+    }
+    if (bitmap != NULL) DeleteObject(bitmap);
+    if (buffer != NULL) DeleteDC(buffer);
     EndPaint(window, &paint);
     return 0;
   }
@@ -488,6 +547,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
     if (g_timer_running) KillTimer(window, ID_TIMER);
     lab_close(&g_lab);
     if (g_font_title != NULL) DeleteObject(g_font_title);
+    if (g_font_countdown != NULL) DeleteObject(g_font_countdown);
     if (g_font_heading != NULL) DeleteObject(g_font_heading);
     if (g_font_body != NULL) DeleteObject(g_font_body);
     if (g_font_small != NULL) DeleteObject(g_font_small);
@@ -502,24 +562,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
   WNDCLASSA window_class;
   HWND window;
   MSG message;
+  RECT window_rect = { 0, 0, 1080, 706 };
+  DWORD window_style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
 
   (void)previous;
   (void)command_line;
-  g_font_title = CreateFontA(29, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-  g_font_heading = CreateFontA(15, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
-                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-  g_font_body = CreateFontA(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-  g_font_small = CreateFontA(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
-  g_font_mono = CreateFontA(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, "Consolas");
+  g_font_title = create_mono_font(30, FW_BOLD);
+  g_font_countdown = create_mono_font(44, FW_NORMAL);
+  g_font_heading = create_mono_font(16, FW_BOLD);
+  g_font_body = create_mono_font(16, FW_NORMAL);
+  g_font_small = create_mono_font(13, FW_NORMAL);
+  g_font_mono = create_mono_font(14, FW_NORMAL);
 
   memset(&window_class, 0, sizeof(window_class));
   window_class.lpfnWndProc = window_proc;
@@ -529,17 +582,21 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
   window_class.lpszClassName = WINDOW_CLASS;
   if (!RegisterClassA(&window_class)) return 1;
 
+  AdjustWindowRectEx(&window_rect, window_style, FALSE, 0);
   window = CreateWindowExA(0, WINDOW_CLASS, "Meoware EDU - Behavior Lab",
-               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-               CW_USEDEFAULT, CW_USEDEFAULT, 1010, 730,
+               window_style,
+               CW_USEDEFAULT, CW_USEDEFAULT,
+               window_rect.right - window_rect.left, window_rect.bottom - window_rect.top,
                NULL, NULL, instance, NULL);
   if (window == NULL) return 1;
   ShowWindow(window, show_command);
   UpdateWindow(window);
 
   while (GetMessageA(&message, NULL, 0, 0) > 0) {
-    TranslateMessage(&message);
-    DispatchMessageA(&message);
+    if (!IsDialogMessageA(window, &message)) {
+      TranslateMessage(&message);
+      DispatchMessageA(&message);
+    }
   }
   return (int)message.wParam;
 }
