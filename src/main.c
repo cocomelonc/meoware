@@ -6,6 +6,7 @@
 
 #include "lab.h"
 #include "receipt.h"
+#include "resource.h"
 
 #define ID_RUN     1001
 #define ID_RESTORE   1002
@@ -128,13 +129,25 @@ static void add_log(const char *text) {
   ++g_log_count;
 }
 
+static int show_message(HWND window, const char *message, const char *title) {
+  MSGBOXPARAMSA options = { 0 };
+  options.cbSize = sizeof(options);
+  options.hwndOwner = window;
+  options.hInstance = GetModuleHandleA(NULL);
+  options.lpszText = message;
+  options.lpszCaption = title;
+  options.dwStyle = MB_OK | MB_USERICON;
+  options.lpszIcon = MAKEINTRESOURCEA(IDI_MEOWARE);
+  return MessageBoxIndirectA(&options);
+}
+
 static void show_error(HWND window, const char *message) {
   g_state = DEMO_ERROR;
   receipt_close(&g_receipt);
   update_buttons();
   add_log("An operation failed; review the message.");
   InvalidateRect(window, NULL, FALSE);
-  MessageBoxA(window, message, "Meoware EDU", MB_OK | MB_ICONERROR);
+  show_message(window, message, "Meoware EDU - error");
 }
 
 static void update_buttons(void) {
@@ -205,13 +218,12 @@ static void on_restore(HWND window) {
 }
 
 static void on_note(HWND window) {
-  MessageBoxA(window,
+  show_message(window,
         "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
         "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
         "Payment demo uses 25 fictional meowcoins. Simulate transfer, wait for three local confirmations, then Check receipt to restore the samples. No real money or blockchain is involved.\r\n\r\n"
         "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
-        "Meoware EDU - demonstration note",
-        MB_OK | MB_ICONINFORMATION);
+        "Meoware EDU - demonstration note");
 }
 
 static void on_deadline(HWND window) {
@@ -225,9 +237,9 @@ static void on_deadline(HWND window) {
     update_buttons();
     add_log("Deadline reached; generated encrypted samples removed.");
     InvalidateRect(window, NULL, FALSE);
-    MessageBoxA(window,
+    show_message(window,
           "The deadline scenario removed only the five sample files generated in this lab folder.",
-          "Meoware EDU - deadline", MB_OK | MB_ICONWARNING);
+          "Meoware EDU - deadline");
   } else {
     show_error(window, error);
   }
@@ -271,7 +283,7 @@ static void on_receipt(HWND window) {
       : "Mock transfer pending. Wait for 3/3 confirmations.";
     add_log(explanation);
     InvalidateRect(window, NULL, FALSE);
-    MessageBoxA(window, explanation, "Meoware EDU - mock receipt", MB_OK | MB_ICONINFORMATION);
+    show_message(window, explanation, "Meoware EDU - mock receipt");
   }
 }
 
@@ -729,7 +741,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
 }
 
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, int show_command) {
-  WNDCLASSA window_class;
+  WNDCLASSEXA window_class;
   HWND window;
   MSG message;
   RECT window_rect = { 0, 0, 1080, 706 };
@@ -745,12 +757,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
   g_font_mono = create_mono_font(14, FW_NORMAL);
 
   memset(&window_class, 0, sizeof(window_class));
+  window_class.cbSize = sizeof(window_class);
   window_class.lpfnWndProc = window_proc;
   window_class.hInstance = instance;
   window_class.hCursor = LoadCursorA(NULL, IDC_ARROW);
+  window_class.hIcon = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE),
+    IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
+  window_class.hIconSm = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE),
+    IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
   window_class.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
   window_class.lpszClassName = WINDOW_CLASS;
-  if (!RegisterClassA(&window_class)) return 1;
+  if (!RegisterClassExA(&window_class)) return 1;
 
   AdjustWindowRectEx(&window_rect, window_style, FALSE, 0);
   window = CreateWindowExA(0, WINDOW_CLASS, "Meoware EDU - Behavior Lab",

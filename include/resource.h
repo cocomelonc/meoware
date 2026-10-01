@@ -1,0 +1,6 @@
+#ifndef MEOWARE_RESOURCE_H
+#define MEOWARE_RESOURCE_H
+
+#define IDI_MEOWARE 1
+
+#endif

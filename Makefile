@@ -11,10 +11,10 @@ RESOURCE_OBJECT = meoware-assets.o
 
 all: $(TARGET)
 
-$(RESOURCE_OBJECT): src/assets.rc assets/sample1.txt assets/sample2.txt assets/sample3.txt assets/sample4.txt assets/sample5.txt
+$(RESOURCE_OBJECT): src/assets.rc include/resource.h meoware.ico assets/sample1.txt assets/sample2.txt assets/sample3.txt assets/sample4.txt assets/sample5.txt
 	$(WINDRES) -i src/assets.rc -O coff -o $@
 
-$(TARGET): $(SOURCES) include/lab.h include/crypto.h include/tea.h include/receipt.h $(RESOURCE_OBJECT)
+$(TARGET): $(SOURCES) include/lab.h include/crypto.h include/tea.h include/receipt.h include/resource.h $(RESOURCE_OBJECT)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SOURCES) $(RESOURCE_OBJECT) $(LDLIBS)
 
 clean:

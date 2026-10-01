@@ -1,4 +1,7 @@
 #include <windows.h>
+#include "../include/resource.h"
+
+IDI_MEOWARE ICON "meoware.ico"
 
 101 RCDATA "assets/sample1.txt"
 102 RCDATA "assets/sample2.txt"
