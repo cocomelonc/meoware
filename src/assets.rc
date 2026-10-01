@@ -1,0 +1,7 @@
+#include <windows.h>
+
+101 RCDATA "assets/sample1.txt"
+102 RCDATA "assets/sample2.txt"
+103 RCDATA "assets/sample3.txt"
+104 RCDATA "assets/sample4.txt"
+105 RCDATA "assets/sample5.txt"
