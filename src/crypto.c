@@ -1,3 +1,4 @@
+/* author: cocomelonc */
 #include "crypto.h"
 
 #include <stdlib.h>
@@ -6,13 +7,32 @@
 #define AES_KEY_SIZE 32
 #define AES_BLOCK_SIZE 16
 
+static const CryptoInfo algorithms[] = {
+  { CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE },
+  { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE }
+};
+
+size_t crypto_algorithm_count(void) { return sizeof(algorithms) / sizeof(algorithms[0]); }
+
+const CryptoInfo *crypto_algorithm_at(size_t index) {
+  return index < crypto_algorithm_count() ? &algorithms[index] : NULL;
+}
+
+const CryptoInfo *crypto_algorithm_info(CryptoAlgorithm id) {
+  size_t index;
+  for (index = 0; index < crypto_algorithm_count(); ++index) {
+    if (algorithms[index].id == id) return &algorithms[index];
+  }
+  return NULL;
+}
+
 bool crypto_random(unsigned char *buffer, ULONG length) {
   return buffer != NULL &&
        BCRYPT_SUCCESS(BCryptGenRandom(NULL, buffer, length,
                       BCRYPT_USE_SYSTEM_PREFERRED_RNG));
 }
 
-bool crypto_init(CryptoContext *context) {
+bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   NTSTATUS status;
   ULONG result_size = 0;
   unsigned char key_bytes[AES_KEY_SIZE];
@@ -22,6 +42,13 @@ bool crypto_init(CryptoContext *context) {
   }
   memset(context, 0, sizeof(*context));
   memset(key_bytes, 0, sizeof(key_bytes));
+  if (crypto_algorithm_info(selected) == NULL) return false;
+  context->selected = selected;
+  if (selected == CRYPTO_TEA128_CBC) {
+    if (!crypto_random(context->tea_key, sizeof(context->tea_key))) goto failure;
+    context->initialized = true;
+    return true;
+  }
 
   status = BCryptOpenAlgorithmProvider(&context->algorithm,
                      BCRYPT_AES_ALGORITHM,
@@ -67,6 +94,7 @@ bool crypto_init(CryptoContext *context) {
   if (!BCRYPT_SUCCESS(status)) {
     goto failure;
   }
+  context->initialized = true;
   return true;
 
 failure:
@@ -92,7 +120,7 @@ void crypto_close(CryptoContext *context) {
     BCryptCloseAlgorithmProvider(context->algorithm, 0);
     context->algorithm = NULL;
   }
-  context->key_object_size = 0;
+  SecureZeroMemory(context, sizeof(*context));
 }
 
 static bool crypt_buffer(CryptoContext *context,
@@ -106,11 +134,22 @@ static bool crypt_buffer(CryptoContext *context,
   unsigned char iv_copy[AES_BLOCK_SIZE];
   NTSTATUS status;
 
-  if (context == NULL || context->key == NULL || iv == NULL ||
+  if (output_size != NULL) *output_size = 0;
+  if (context == NULL || !context->initialized || iv == NULL ||
     (input == NULL && input_size != 0) || output == NULL ||
     output_size == NULL || input_size > output_capacity) {
     return false;
   }
+
+  if (context->selected == CRYPTO_TEA128_CBC) {
+    size_t written = 0;
+    bool success = encrypt
+      ? tea_cbc_encrypt(context->tea_key, iv, input, input_size, output, output_capacity, &written)
+      : tea_cbc_decrypt(context->tea_key, iv, input, input_size, output, output_capacity, &written);
+    if (success) *output_size = (ULONG)written;
+    return success;
+  }
+  if (context->selected != CRYPTO_AES256_CBC || context->key == NULL) return false;
 
   memcpy(iv_copy, iv, sizeof(iv_copy));
   if (encrypt) {

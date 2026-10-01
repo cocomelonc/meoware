@@ -17,7 +17,7 @@ typedef struct {
 } LabSession;
 
 bool lab_initialize(LabSession *lab, char *error, size_t error_capacity);
-bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity);
+bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error, size_t error_capacity);
 bool lab_restore_samples(LabSession *lab, char *error, size_t error_capacity);
 bool lab_expire_samples(LabSession *lab, char *error, size_t error_capacity);
 void lab_close(LabSession *lab);

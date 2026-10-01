@@ -1,10 +1,12 @@
+/* author: cocomelonc */
 #include "lab.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define HEADER_SIZE 20
+/* MWA2 | algorithm (1) | IV length (1) | reserved (2) | IV slot (16). */
+#define HEADER_SIZE 24
 #define MAX_SAMPLE_SIZE (16UL * 1024UL * 1024UL)
 #define SAMPLE_RESOURCE_BASE 101
 
@@ -66,7 +68,7 @@ static bool read_file(const char *path, unsigned char **data, ULONG *size) {
     return false;
   }
   if (!GetFileSizeEx(file, &file_size) || file_size.QuadPart < 0 ||
-    file_size.QuadPart > MAX_SAMPLE_SIZE) {
+    file_size.QuadPart > MAX_SAMPLE_SIZE + HEADER_SIZE + CRYPTO_MAX_BLOCK_SIZE) {
     CloseHandle(file);
     return false;
   }
@@ -160,10 +162,6 @@ bool lab_initialize(LabSession *lab, char *error, size_t error_capacity) {
   }
   memset(lab, 0, sizeof(*lab));
 
-  if (!crypto_init(&lab->crypto)) {
-    set_error(error, error_capacity, "Windows AES initialization failed.");
-    return false;
-  }
   if (!make_unique_lab_directory(lab->directory, sizeof(lab->directory)) ||
     !join_path(crypt_path, sizeof(crypt_path), lab->directory, "CryptPath") ||
     !CreateDirectoryA(crypt_path, NULL)) {
@@ -181,11 +179,17 @@ bool lab_initialize(LabSession *lab, char *error, size_t error_capacity) {
   return true;
 }
 
-bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity) {
+bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error, size_t error_capacity) {
   unsigned int i;
+  const CryptoInfo *info = crypto_algorithm_info(selected);
 
-  if (lab == NULL || !lab->initialized || lab->encrypted || lab->expired) {
+  if (lab == NULL || !lab->initialized || lab->encrypted || lab->expired ||
+      lab->restored || lab->crypto.initialized || info == NULL) {
     set_error(error, error_capacity, "The lab is not ready for encryption.");
+    return false;
+  }
+  if (!crypto_init(&lab->crypto, selected)) {
+    set_error(error, error_capacity, "Could not initialize the selected cipher and session key.");
     return false;
   }
 
@@ -196,7 +200,7 @@ bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity) {
     unsigned char *plain = NULL;
     unsigned char *cipher = NULL;
     unsigned char *record = NULL;
-    unsigned char iv[16];
+    unsigned char iv[CRYPTO_MAX_BLOCK_SIZE] = { 0 };
     ULONG plain_size = 0;
     ULONG cipher_capacity;
     ULONG cipher_size = 0;
@@ -204,13 +208,13 @@ bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity) {
 
     if (!join_path(input_path, sizeof(input_path), lab->directory, sample_names[i]) ||
       !read_file(input_path, &plain, &plain_size) ||
-      !crypto_random(iv, sizeof(iv))) {
+      !crypto_random(iv, info->block_size)) {
       goto encrypt_failure;
     }
-    if (plain_size > MAX_SAMPLE_SIZE - 16) {
+    if (plain_size > MAX_SAMPLE_SIZE) {
       goto encrypt_failure;
     }
-    cipher_capacity = plain_size + 16;
+    cipher_capacity = plain_size + info->block_size;
     cipher = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_capacity);
     if (cipher == NULL ||
       !crypto_encrypt(&lab->crypto, iv, plain, plain_size,
@@ -222,8 +226,11 @@ bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity) {
     if (record == NULL) {
       goto encrypt_failure;
     }
-    memcpy(record, "MWA1", 4);
-    memcpy(record + 4, iv, sizeof(iv));
+    memset(record, 0, HEADER_SIZE);
+    memcpy(record, "MWA2", 4);
+    record[4] = (unsigned char)selected;
+    record[5] = (unsigned char)info->block_size;
+    memcpy(record + 8, iv, info->block_size);
     memcpy(record + HEADER_SIZE, cipher, cipher_size);
 
     snprintf(output_name, sizeof(output_name), "%s.meoware", sample_names[i]);
@@ -240,7 +247,10 @@ bool lab_encrypt_samples(LabSession *lab, char *error, size_t error_capacity) {
     success = true;
 
 encrypt_failure:
-    if (plain != NULL) HeapFree(GetProcessHeap(), 0, plain);
+    if (plain != NULL) {
+      SecureZeroMemory(plain, plain_size);
+      HeapFree(GetProcessHeap(), 0, plain);
+    }
     if (cipher != NULL) HeapFree(GetProcessHeap(), 0, cipher);
     if (record != NULL) HeapFree(GetProcessHeap(), 0, record);
     SecureZeroMemory(iv, sizeof(iv));
@@ -256,9 +266,15 @@ encrypt_failure:
 
 bool lab_restore_samples(LabSession *lab, char *error, size_t error_capacity) {
   unsigned int i;
+  const CryptoInfo *info;
 
   if (lab == NULL || !lab->initialized || !lab->encrypted || lab->expired) {
     set_error(error, error_capacity, "There are no encrypted demo samples to restore.");
+    return false;
+  }
+  info = crypto_algorithm_info(lab->crypto.selected);
+  if (info == NULL || !lab->crypto.initialized) {
+    set_error(error, error_capacity, "The session cipher is unavailable.");
     return false;
   }
 
@@ -269,7 +285,7 @@ bool lab_restore_samples(LabSession *lab, char *error, size_t error_capacity) {
     unsigned char *record = NULL;
     unsigned char *plain = NULL;
     unsigned char *cipher;
-    unsigned char iv[16];
+    unsigned char iv[CRYPTO_MAX_BLOCK_SIZE] = { 0 };
     ULONG record_size = 0;
     ULONG plain_size = 0;
     ULONG cipher_size;
@@ -279,12 +295,15 @@ bool lab_restore_samples(LabSession *lab, char *error, size_t error_capacity) {
     if (!join_path(input_path, sizeof(input_path), lab->directory, input_name) ||
       !join_path(output_path, sizeof(output_path), lab->directory, sample_names[i]) ||
       !read_file(input_path, &record, &record_size) ||
-      record_size <= HEADER_SIZE || memcmp(record, "MWA1", 4) != 0) {
+      record_size <= HEADER_SIZE || memcmp(record, "MWA2", 4) != 0 ||
+      record[4] != (unsigned char)info->id || record[5] != info->block_size ||
+      record[6] != 0 || record[7] != 0 ||
+      (record_size - HEADER_SIZE) % info->block_size != 0) {
       goto restore_failure;
     }
     cipher = record + HEADER_SIZE;
     cipher_size = record_size - HEADER_SIZE;
-    memcpy(iv, record + 4, sizeof(iv));
+    memcpy(iv, record + 8, info->block_size);
     plain = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_size);
     if (plain == NULL ||
       !crypto_decrypt(&lab->crypto, iv, cipher, cipher_size,

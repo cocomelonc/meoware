@@ -1,13 +1,19 @@
+/* author: cocomelonc */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "lab.h"
+#include "receipt.h"
 
 #define ID_RUN     1001
 #define ID_RESTORE   1002
 #define ID_NOTE    1003
+#define ID_TRANSFER 1004
+#define ID_RECEIPT  1005
+#define ID_VIEW     1006
+#define ID_ALGORITHM 1007
 #define ID_TIMER   1
 #define COUNTDOWN_SECONDS (24UL * 60UL * 60UL)
 #define LOG_CAPACITY 6
@@ -34,6 +40,13 @@ static LabSession g_lab;
 static HWND g_run_button;
 static HWND g_restore_button;
 static HWND g_note_button;
+static HWND g_transfer_button;
+static HWND g_receipt_button;
+static HWND g_view_button;
+static HWND g_algorithm_picker;
+static CryptoAlgorithm g_selected_algorithm = CRYPTO_AES256_CBC;
+static DemoReceipt g_receipt;
+static bool g_payment_view = true;
 static HFONT g_font_title;
 static HFONT g_font_countdown;
 static HFONT g_font_heading;
@@ -49,6 +62,9 @@ static bool g_lab_ready;
 static DemoState g_state = DEMO_READY;
 static LogEntry g_log[LOG_CAPACITY];
 static unsigned int g_log_count;
+
+static void update_buttons(void);
+static void on_deadline(HWND window);
 
 enum {
   COLOR_BG = RGB(247, 245, 250),
@@ -114,12 +130,15 @@ static void add_log(const char *text) {
 
 static void show_error(HWND window, const char *message) {
   g_state = DEMO_ERROR;
+  receipt_close(&g_receipt);
+  update_buttons();
   add_log("An operation failed; review the message.");
   InvalidateRect(window, NULL, FALSE);
   MessageBoxA(window, message, "Meoware EDU", MB_OK | MB_ICONERROR);
 }
 
 static void update_buttons(void) {
+  EnableWindow(g_algorithm_picker, g_lab_ready && g_state == DEMO_READY);
   if (g_run_button != NULL) {
     EnableWindow(g_run_button, g_lab_ready && g_state == DEMO_READY);
   }
@@ -129,12 +148,22 @@ static void update_buttons(void) {
   if (g_run_button != NULL) InvalidateRect(g_run_button, NULL, TRUE);
   if (g_restore_button != NULL) InvalidateRect(g_restore_button, NULL, TRUE);
   if (g_note_button != NULL) InvalidateRect(g_note_button, NULL, TRUE);
+  EnableWindow(g_transfer_button, g_state == DEMO_RUNNING && g_receipt.phase == RECEIPT_WAITING);
+  EnableWindow(g_receipt_button, g_state == DEMO_RUNNING);
+  ShowWindow(g_transfer_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
+  ShowWindow(g_receipt_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
+  SetWindowTextA(g_view_button, g_payment_view ? "Show activity" : "Payment demo");
+  InvalidateRect(g_transfer_button, NULL, FALSE);
+  InvalidateRect(g_receipt_button, NULL, FALSE);
+  InvalidateRect(g_view_button, NULL, FALSE);
 }
 
 static void on_run(HWND window) {
   char error[256];
+  char event[160];
 
-  if (!lab_encrypt_samples(&g_lab, error, sizeof(error))) {
+  if (!g_lab_ready || g_state != DEMO_READY) return;
+  if (!lab_encrypt_samples(&g_lab, g_selected_algorithm, error, sizeof(error))) {
     show_error(window, error);
     return;
   }
@@ -142,9 +171,12 @@ static void on_run(HWND window) {
   g_deadline = g_started + (ULONGLONG)COUNTDOWN_SECONDS * 1000;
   g_timer_running = true;
   g_state = DEMO_RUNNING;
+  receipt_open(&g_receipt);
   SetTimer(window, ID_TIMER, 1000, NULL);
   update_buttons();
-  add_log("Five bundled samples encrypted in the private lab.");
+  snprintf(event, sizeof(event), "Five samples encrypted with %s.",
+    crypto_algorithm_info(g_lab.crypto.selected)->name);
+  add_log(event);
   add_log("Encrypted copies use the .meoware extension.");
   InvalidateRect(window, NULL, FALSE);
 }
@@ -152,6 +184,11 @@ static void on_run(HWND window) {
 static void on_restore(HWND window) {
   char error[256];
 
+  if (!g_lab_ready || g_state != DEMO_RUNNING) return;
+  if (GetTickCount64() >= g_deadline) {
+    on_deadline(window);
+    return;
+  }
   if (!lab_restore_samples(&g_lab, error, sizeof(error))) {
     show_error(window, error);
     return;
@@ -161,6 +198,7 @@ static void on_restore(HWND window) {
     g_timer_running = false;
   }
   g_state = DEMO_RESTORED;
+  receipt_close(&g_receipt);
   update_buttons();
   add_log("All five samples restored using the session key.");
   InvalidateRect(window, NULL, FALSE);
@@ -170,7 +208,8 @@ static void on_note(HWND window) {
   MessageBoxA(window,
         "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
         "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
-        "Use Restore samples to recover them while this session is active. The deadline scenario affects only these generated demo files. No payment is requested or verified.",
+        "Payment demo uses 25 fictional meowcoins. Simulate transfer, wait for three local confirmations, then Check receipt to restore the samples. No real money or blockchain is involved.\r\n\r\n"
+        "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
         "Meoware EDU - demonstration note",
         MB_OK | MB_ICONINFORMATION);
 }
@@ -180,6 +219,7 @@ static void on_deadline(HWND window) {
 
   KillTimer(window, ID_TIMER);
   g_timer_running = false;
+  receipt_close(&g_receipt);
   if (lab_expire_samples(&g_lab, error, sizeof(error))) {
     g_state = DEMO_EXPIRED;
     update_buttons();
@@ -190,6 +230,48 @@ static void on_deadline(HWND window) {
           "Meoware EDU - deadline", MB_OK | MB_ICONWARNING);
   } else {
     show_error(window, error);
+  }
+}
+
+static bool payment_session_active(HWND window) {
+  if (!g_lab_ready || g_state != DEMO_RUNNING) return false;
+  if (GetTickCount64() >= g_deadline) {
+    on_deadline(window);
+    return false;
+  }
+  return true;
+}
+
+static void refresh_receipt(HWND window) {
+  if (receipt_advance(&g_receipt, GetTickCount64())) {
+    if (g_receipt.phase == RECEIPT_CONFIRMED) {
+      add_log("Mock receipt confirmed. Check receipt to restore.");
+    }
+    InvalidateRect(window, NULL, FALSE);
+  }
+}
+
+static void on_transfer(HWND window) {
+  if (!payment_session_active(window)) return;
+  if (!receipt_submit(&g_receipt, GetTickCount64())) return;
+  add_log("Fictional meowcoins submitted; confirmations pending.");
+  update_buttons();
+  InvalidateRect(window, NULL, FALSE);
+}
+
+static void on_receipt(HWND window) {
+  if (!payment_session_active(window)) return;
+  refresh_receipt(window);
+  if (g_receipt.phase == RECEIPT_CONFIRMED) {
+    add_log("Mock receipt accepted; restoring lab samples.");
+    on_restore(window);
+  } else {
+    const char *explanation = g_receipt.phase == RECEIPT_WAITING
+      ? "No mock transfer yet. Click Simulate transfer first."
+      : "Mock transfer pending. Wait for 3/3 confirmations.";
+    add_log(explanation);
+    InvalidateRect(window, NULL, FALSE);
+    MessageBoxA(window, explanation, "Meoware EDU - mock receipt", MB_OK | MB_ICONINFORMATION);
   }
 }
 
@@ -266,10 +348,48 @@ static void draw_status_dot(HDC dc, int x, int y, COLORREF color) {
   DeleteObject(brush);
 }
 
+static void draw_payment(HDC dc, int x) {
+  char summary[100];
+  const char *hint;
+  COLORREF ink = g_receipt.phase == RECEIPT_CONFIRMED ? COLOR_TEAL : COLOR_ACCENT_DARK;
+  unsigned int step;
+
+  switch (g_receipt.phase) {
+  case RECEIPT_WAITING: hint = "Awaiting a simulated transfer."; break;
+  case RECEIPT_PENDING: hint = "Confirming locally / one step every 2 seconds."; break;
+  case RECEIPT_CONFIRMED: hint = "Receipt ready. Check receipt to restore samples."; break;
+  case RECEIPT_CLOSED:
+    hint = g_state == DEMO_RESTORED ? "Samples restored / session complete." : "Session closed / transfers unavailable.";
+    break;
+  default: hint = "Run demo to start the payment scenario."; break;
+  }
+  draw_text(dc, "PAYMENT DEMO", x + 22, 369, 456, 23,
+    COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "Fictional meowcoins only / no real payment", x + 22, 394, 456, 18,
+    COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  snprintf(summary, sizeof(summary), "Amount: %u meowcoins / Received: %u", RECEIPT_DEMO_UNITS, g_receipt.credited_units);
+  draw_text(dc, summary, x + 22, 425, 456, 22,
+    COLOR_TEXT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "Destination: demo://meoware/local-session", x + 22, 453, 456, 20,
+    COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  snprintf(summary, sizeof(summary), "Confirmations: %u / %u", g_receipt.confirmations, RECEIPT_STEPS);
+  draw_text(dc, summary, x + 22, 482, 456, 20,
+    ink, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  for (step = 0; step < RECEIPT_STEPS; ++step) {
+    COLORREF color = step < g_receipt.confirmations ? COLOR_TEAL : COLOR_TRACK;
+    fill_round_rect(dc, x + 22 + (int)step * 154, 512, 146, 5, 4, color, color);
+  }
+  draw_text(dc, hint, x + 22, 530, 456, 30,
+    ink, g_font_small, DT_LEFT | DT_WORDBREAK);
+}
+
 static void draw_dashboard(HWND window, HDC dc) {
   RECT client;
   char countdown[32];
   char path_text[MAX_PATH + 32];
+  char algorithm_text[100];
+  const CryptoInfo *algorithm = crypto_algorithm_info(
+    g_lab.crypto.initialized ? g_lab.crypto.selected : g_selected_algorithm);
   ULONGLONG seconds = 24UL * 60UL * 60UL;
   int client_width;
   int left_x = 28;
@@ -286,12 +406,12 @@ static void draw_dashboard(HWND window, HDC dc) {
 
   fill_rect(dc, 0, 0, client_width, client.bottom, COLOR_BG);
 
-  fill_round_rect(dc, 29, 24, 44, 44, 16, COLOR_PANEL_ALT, COLOR_BORDER);
-  draw_text(dc, ":3", 29, 27, 44, 36, COLOR_ACCENT_DARK, g_font_heading,
+  fill_round_rect(dc, 29, 24, 80, 44, 16, COLOR_PANEL_ALT, COLOR_BORDER);
+  draw_text(dc, "=^..^=", 29, 27, 80, 36, COLOR_ACCENT_DARK, g_font_heading,
         DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "MEOWARE", 84, 22, 260, 32, COLOR_TEXT, g_font_title,
+  draw_text(dc, "MEOWARE", 124, 22, 260, 32, COLOR_TEXT, g_font_title,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "EDU  /  BEHAVIOR LAB", 86, 57, 430, 20,
+  draw_text(dc, "EDU  /  BEHAVIOR LAB", 126, 57, 430, 20,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   fill_round_rect(dc, client_width - 190, 31, 160, 30, 15,
           COLOR_MINT, COLOR_MINT);
@@ -347,8 +467,12 @@ static void draw_dashboard(HWND window, HDC dc) {
   draw_text(dc, "5 samples / private folder / offline",
         right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "AES-256-CBC via Windows CNG", right_x + 23, 220, 380, 18,
+  snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
+    algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
+  draw_text(dc, algorithm_text, right_x + 23, 220, 456, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "ALGORITHM", 790, 267, 262, 17, COLOR_MUTED,
+    g_font_small, DT_LEFT | DT_SINGLELINE);
 
   draw_card(dc, left_x, 351, card_width, 277);
   draw_text(dc, "SAMPLE FILES", left_x + 22, 369, card_width - 44, 23,
@@ -387,16 +511,20 @@ static void draw_dashboard(HWND window, HDC dc) {
   }
 
   draw_card(dc, right_x, 351, 500, 277);
-  draw_text(dc, "ACTIVITY", right_x + 22, 369, 385, 23,
-        COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Local events from this session", right_x + 22, 394, 385, 18,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  for (i = 0; i < (int)g_log_count; ++i) {
-    int row_y = 432 + i * 30;
-    draw_text(dc, g_log[i].time, right_x + 22, row_y, 48, 20,
-          COLOR_ACCENT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(dc, g_log[i].text, right_x + 78, row_y, 400, 28,
-          COLOR_TEXT, g_font_small, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+  if (g_payment_view) {
+    draw_payment(dc, right_x);
+  } else {
+    draw_text(dc, "ACTIVITY", right_x + 22, 369, 385, 23,
+          COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(dc, "Local events from this session", right_x + 22, 394, 385, 18,
+          COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    for (i = 0; i < (int)g_log_count; ++i) {
+      int row_y = 432 + i * 30;
+      draw_text(dc, g_log[i].time, right_x + 22, row_y, 48, 20,
+            COLOR_ACCENT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+      draw_text(dc, g_log[i].text, right_x + 78, row_y, 400, 28,
+            COLOR_TEXT, g_font_small, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+    }
   }
 
   fill_round_rect(dc, 28, 646, client_width - 56, 36, 12,
@@ -418,27 +546,26 @@ static void draw_button(const DRAWITEMSTRUCT *item)
   COLORREF fill;
   COLORREF border;
   COLORREF text_color;
-  const char *label;
+  char label[40];
   int width = r.right - r.left;
   int height = r.bottom - r.top;
 
-  fill_rect(dc, r.left, r.top, width, height, COLOR_BG);
+  bool payment_control = item->CtlID == ID_TRANSFER || item->CtlID == ID_RECEIPT;
+  GetWindowTextA(item->hwndItem, label, sizeof(label));
+  fill_rect(dc, r.left, r.top, width, height, payment_control ? COLOR_PANEL : COLOR_BG);
 
-  if (item->CtlID == ID_RUN) {
+  if (item->CtlID == ID_RUN || item->CtlID == ID_TRANSFER) {
     fill = disabled ? COLOR_PANEL_ALT : (hovered ? COLOR_ACCENT_DARK : COLOR_ACCENT);
     border = disabled ? COLOR_BORDER : COLOR_ACCENT;
     text_color = disabled ? COLOR_MUTED : RGB(255, 255, 255);
-    label = "Run demo";
-  } else if (item->CtlID == ID_RESTORE) {
+  } else if (item->CtlID == ID_RESTORE || item->CtlID == ID_RECEIPT) {
     fill = disabled ? COLOR_PANEL : (hovered ? COLOR_MINT : COLOR_PANEL_ALT);
     border = disabled ? COLOR_BORDER : COLOR_ACCENT;
     text_color = disabled ? COLOR_MUTED : COLOR_ACCENT_DARK;
-    label = "Restore samples";
   } else {
     fill = pressed || hovered ? COLOR_PANEL_ALT : COLOR_PANEL;
     border = COLOR_BORDER;
     text_color = disabled ? COLOR_MUTED : COLOR_TEXT;
-    label = "View note";
   }
   if (pressed && !disabled && item->CtlID != ID_NOTE) {
     fill = COLOR_ACCENT_DARK;
@@ -475,6 +602,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   switch (message) {
   case WM_CREATE: {
     char error[256];
+    size_t algorithm_index;
 
     g_run_button = CreateWindowExA(0, "BUTTON", "Run demo",
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160, 44,
@@ -485,9 +613,32 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
     g_note_button = CreateWindowExA(0, "BUTTON", "View note",
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 412, 286, 160, 44,
       window, (HMENU)(INT_PTR)ID_NOTE, GetModuleHandleA(NULL), NULL);
+    g_view_button = CreateWindowExA(0, "BUTTON", "Show activity",
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 584, 286, 180, 44,
+      window, (HMENU)(INT_PTR)ID_VIEW, GetModuleHandleA(NULL), NULL);
+    g_transfer_button = CreateWindowExA(0, "BUTTON", "Simulate transfer",
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 574, 571, 222, 38,
+      window, (HMENU)(INT_PTR)ID_TRANSFER, GetModuleHandleA(NULL), NULL);
+    g_receipt_button = CreateWindowExA(0, "BUTTON", "Check receipt",
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 808, 571, 222, 38,
+      window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
+    g_algorithm_picker = CreateWindowExA(0, "COMBOBOX", "Algorithm",
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
+      790, 291, 262, 180, window, (HMENU)(INT_PTR)ID_ALGORITHM,
+      GetModuleHandleA(NULL), NULL);
+    SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
+    for (algorithm_index = 0; algorithm_index < crypto_algorithm_count(); ++algorithm_index) {
+      const CryptoInfo *entry = crypto_algorithm_at(algorithm_index);
+      LRESULT row = SendMessageA(g_algorithm_picker, CB_ADDSTRING, 0, (LPARAM)entry->name);
+      if (row >= 0) SendMessageA(g_algorithm_picker, CB_SETITEMDATA, (WPARAM)row, entry->id);
+    }
+    SendMessageA(g_algorithm_picker, CB_SETCURSEL, 0, 0);
     g_button_proc = (WNDPROC)SetWindowLongPtrA(g_run_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     SetWindowLongPtrA(g_restore_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     SetWindowLongPtrA(g_note_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+    SetWindowLongPtrA(g_view_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+    SetWindowLongPtrA(g_transfer_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+    SetWindowLongPtrA(g_receipt_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     EnableWindow(g_restore_button, FALSE);
     if (!lab_initialize(&g_lab, error, sizeof(error))) {
       show_error(window, error);
@@ -502,13 +653,29 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   }
   case WM_COMMAND:
     switch (LOWORD(wparam)) {
+    case ID_ALGORITHM:
+      if (HIWORD(wparam) == CBN_SELCHANGE && g_state == DEMO_READY) {
+        LRESULT row = SendMessageA(g_algorithm_picker, CB_GETCURSEL, 0, 0);
+        CryptoAlgorithm selected = (CryptoAlgorithm)SendMessageA(g_algorithm_picker, CB_GETITEMDATA, (WPARAM)row, 0);
+        if (crypto_algorithm_info(selected) != NULL) g_selected_algorithm = selected;
+        InvalidateRect(window, NULL, FALSE);
+      }
+      return 0;
     case ID_RUN: on_run(window); return 0;
     case ID_RESTORE: on_restore(window); return 0;
     case ID_NOTE: on_note(window); return 0;
+    case ID_TRANSFER: on_transfer(window); return 0;
+    case ID_RECEIPT: on_receipt(window); return 0;
+    case ID_VIEW:
+      g_payment_view = !g_payment_view;
+      update_buttons();
+      InvalidateRect(window, NULL, FALSE);
+      return 0;
     }
     break;
   case WM_DRAWITEM:
-    if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE) {
+    if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE ||
+        wparam == ID_TRANSFER || wparam == ID_RECEIPT || wparam == ID_VIEW) {
       draw_button((const DRAWITEMSTRUCT *)lparam);
       return TRUE;
     }
@@ -516,7 +683,10 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   case WM_TIMER:
     if (wparam == ID_TIMER && g_timer_running) {
       if (GetTickCount64() >= g_deadline) on_deadline(window);
-      else InvalidateRect(window, NULL, FALSE);
+      else {
+        refresh_receipt(window);
+        InvalidateRect(window, NULL, FALSE);
+      }
       return 0;
     }
     break;

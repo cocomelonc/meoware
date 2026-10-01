@@ -4,18 +4,34 @@ CFLAGS = -std=c11 -O2 -Wall -Wextra -Wpedantic -Iinclude
 LDFLAGS = -mwindows
 LDLIBS = -lbcrypt -luser32 -lgdi32
 TARGET ?= meoware.exe
-SOURCES = src/main.c src/lab.c src/crypto.c
+SOURCES = src/main.c src/lab.c src/crypto.c src/tea.c src/receipt.c
 RESOURCE_OBJECT = meoware-assets.o
 
-.PHONY: all clean
+.PHONY: all clean test windows-test-build
 
 all: $(TARGET)
 
 $(RESOURCE_OBJECT): src/assets.rc assets/sample1.txt assets/sample2.txt assets/sample3.txt assets/sample4.txt assets/sample5.txt
 	$(WINDRES) -i src/assets.rc -O coff -o $@
 
-$(TARGET): $(SOURCES) include/lab.h include/crypto.h $(RESOURCE_OBJECT)
+$(TARGET): $(SOURCES) include/lab.h include/crypto.h include/tea.h include/receipt.h $(RESOURCE_OBJECT)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SOURCES) $(RESOURCE_OBJECT) $(LDLIBS)
 
 clean:
 	$(RM) $(TARGET) $(RESOURCE_OBJECT)
+
+test:
+	@set -e; native_test=$$(mktemp /tmp/meoware-test-XXXXXX); \
+	trap 'rm -f "$$native_test"' EXIT; \
+	for suite in receipt tea; do \
+	  $(HOSTCC) $(HOSTCFLAGS) -Iinclude tests/$${suite}_test.c src/$${suite}.c -o "$$native_test"; \
+	  "$$native_test"; \
+	done
+
+HOSTCC ?= cc
+HOSTCFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -Werror
+
+WINDOWS_TEST ?= /tmp/meoware-lab-tests.exe
+windows-test-build: $(RESOURCE_OBJECT)
+	$(CC) $(CFLAGS) -Werror -o $(WINDOWS_TEST) tests/windows_lab_test.c \
+	  src/lab.c src/crypto.c src/tea.c $(RESOURCE_OBJECT) $(LDLIBS)
