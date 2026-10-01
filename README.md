@@ -10,7 +10,9 @@ The sample text assets are embedded into the executable at build time, so the GU
 
 ## Algorithms
 
-Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is the default. The selection locks when the session starts; direct restoration and mock-payment restoration both use that session's cipher and key. Restart the application to try another algorithm in a fresh lab.
+Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is the default. The selection locks when the session starts; direct restoration and mock-payment restoration both use that session's cipher and key. Restart the application to try another algorithm in a fresh lab.     
+
+![img](./screenshots/3.png)    
 
 | GUI option | Key | Block / IV | Implementation |
 | --- | --- | --- | --- |
