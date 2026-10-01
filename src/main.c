@@ -45,7 +45,13 @@ static HWND g_transfer_button;
 static HWND g_receipt_button;
 static HWND g_view_button;
 static HWND g_algorithm_picker;
+static WNDPROC g_picker_proc;
+static WNDPROC g_picker_list_proc;
+static HBRUSH g_picker_brush;
+static bool g_picker_hover;
+static bool g_picker_open;
 static CryptoAlgorithm g_selected_algorithm = CRYPTO_AES256_CBC;
+static CryptoAlgorithm g_picker_initial = CRYPTO_AES256_CBC;
 static DemoReceipt g_receipt;
 static bool g_payment_view = true;
 static HFONT g_font_title;
@@ -609,12 +615,156 @@ static LRESULT CALLBACK button_proc(HWND button, UINT message, WPARAM wparam, LP
   return CallWindowProcA(g_button_proc, button, message, wparam, lparam);
 }
 
+static void draw_algorithm_picker(HWND picker, HDC dc) {
+  RECT bounds;
+  bool enabled = IsWindowEnabled(picker) != FALSE;
+  bool focused = GetFocus() == picker;
+  bool active = enabled && (g_picker_hover || g_picker_open || focused);
+  COLORREF ink = enabled ? COLOR_ACCENT_DARK : COLOR_MUTED;
+  const CryptoInfo *algorithm = crypto_algorithm_info(g_selected_algorithm);
+  HPEN pen;
+  HGDIOBJ previous;
+  POINT chevron[3];
+  int arrow_x, middle;
+
+  GetClientRect(picker, &bounds);
+  fill_rect(dc, 0, 0, bounds.right, bounds.bottom, COLOR_BG);
+  fill_round_rect(dc, 0, 0, bounds.right, bounds.bottom, 18,
+    active ? COLOR_PANEL_ALT : COLOR_PANEL, active ? COLOR_ACCENT : COLOR_BORDER);
+  if (focused && enabled) {
+    HGDIOBJ old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    pen = CreatePen(PS_SOLID, 1, COLOR_ACCENT);
+    previous = SelectObject(dc, pen);
+    RoundRect(dc, 3, 3, bounds.right - 3, bounds.bottom - 3, 14, 14);
+    SelectObject(dc, previous);
+    SelectObject(dc, old_brush);
+    DeleteObject(pen);
+  }
+  draw_text(dc, algorithm != NULL ? algorithm->name : "Select algorithm",
+    16, 0, bounds.right - 72, bounds.bottom, ink, g_font_body,
+    DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+  arrow_x = bounds.right - 27;
+  middle = bounds.bottom / 2;
+  fill_round_rect(dc, bounds.right - 45, middle - 14, 34, 28, 10,
+    enabled ? COLOR_PANEL_ALT : COLOR_BG, enabled ? COLOR_PANEL_ALT : COLOR_BG);
+  chevron[0] = (POINT){ arrow_x - 5, middle + (g_picker_open ? 2 : -2) };
+  chevron[1] = (POINT){ arrow_x, middle + (g_picker_open ? -3 : 3) };
+  chevron[2] = (POINT){ arrow_x + 5, chevron[0].y };
+  pen = CreatePen(PS_SOLID, 2, ink);
+  previous = SelectObject(dc, pen);
+  Polyline(dc, chevron, 3);
+  SelectObject(dc, previous);
+  DeleteObject(pen);
+}
+
+static void draw_algorithm_option(const DRAWITEMSTRUCT *item) {
+  const CryptoInfo *algorithm = crypto_algorithm_info((CryptoAlgorithm)item->itemData);
+  RECT r = item->rcItem;
+  bool highlighted = (item->itemState & ODS_SELECTED) != 0;
+  bool selected = algorithm != NULL && algorithm->id == g_selected_algorithm;
+  char detail[80];
+  int saved = SaveDC(item->hDC);
+
+  fill_rect(item->hDC, r.left, r.top, r.right - r.left, r.bottom - r.top, COLOR_PANEL);
+  if (algorithm != NULL) {
+    if (item->itemState & ODS_COMBOBOXEDIT) {
+      draw_text(item->hDC, algorithm->name, r.left + 12, r.top, r.right - r.left - 24,
+        r.bottom - r.top, COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    } else {
+      if (highlighted || selected) {
+        COLORREF tint = highlighted ? COLOR_PANEL_ALT : COLOR_MINT;
+        fill_round_rect(item->hDC, r.left + 5, r.top + 4, r.right - r.left - 10,
+          r.bottom - r.top - 8, 12, tint, tint);
+      }
+      draw_text(item->hDC, algorithm->name, r.left + 16, r.top + 9, r.right - r.left - 52,
+        21, COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+      snprintf(detail, sizeof(detail), "%u-bit key / %u-bit block", algorithm->key_size * 8, algorithm->block_size * 8);
+      draw_text(item->hDC, detail, r.left + 16, r.top + 32, r.right - r.left - 32,
+        18, COLOR_MUTED, g_font_small, DT_LEFT | DT_SINGLELINE);
+      if (selected) {
+        POINT check[] = { { r.right - 32, r.top + 20 }, { r.right - 28, r.top + 24 }, { r.right - 21, r.top + 16 } };
+        HPEN pen = CreatePen(PS_SOLID, 2, COLOR_TEAL);
+        HGDIOBJ previous = SelectObject(item->hDC, pen);
+        Polyline(item->hDC, check, 3);
+        SelectObject(item->hDC, previous);
+        DeleteObject(pen);
+      }
+    }
+  }
+  RestoreDC(item->hDC, saved);
+}
+
+/* Keep the native combo's selection, keyboard navigation, and accessibility;
+ * only replace its painting and the popup's outer frame. */
+static LRESULT CALLBACK algorithm_picker_proc(HWND picker, UINT message, WPARAM wparam, LPARAM lparam) {
+  LRESULT result;
+  if (message == WM_PAINT || message == WM_PRINTCLIENT) {
+    PAINTSTRUCT paint;
+    HDC dc = message == WM_PAINT ? BeginPaint(picker, &paint) : (HDC)wparam;
+    int saved = SaveDC(dc);
+    draw_algorithm_picker(picker, dc);
+    RestoreDC(dc, saved);
+    if (message == WM_PAINT) EndPaint(picker, &paint);
+    return 0;
+  }
+  if (message == WM_ERASEBKGND) return 1;
+  if (message == WM_MOUSEMOVE && !g_picker_hover) {
+    TRACKMOUSEEVENT track = { sizeof(track), TME_LEAVE, picker, 0 };
+    g_picker_hover = true;
+    TrackMouseEvent(&track);
+  } else if (message == WM_MOUSELEAVE) {
+    g_picker_hover = false;
+  }
+  result = CallWindowProcA(g_picker_proc, picker, message, wparam, lparam);
+  switch (message) {
+  case WM_MOUSEMOVE: case WM_MOUSELEAVE: case WM_SETFOCUS: case WM_KILLFOCUS:
+  case WM_ENABLE: case WM_KEYDOWN: case WM_KEYUP: case WM_LBUTTONDOWN:
+  case WM_LBUTTONUP: case CB_SHOWDROPDOWN: case CB_SETCURSEL:
+    InvalidateRect(picker, NULL, FALSE);
+    break;
+  }
+  return result;
+}
+
+static LRESULT CALLBACK algorithm_list_proc(HWND list, UINT message, WPARAM wparam, LPARAM lparam) {
+  if (message == WM_NCPAINT) {
+    RECT bounds;
+    HDC dc = GetWindowDC(list);
+    HPEN pen = CreatePen(PS_SOLID, 1, COLOR_BORDER);
+    HGDIOBJ previous = SelectObject(dc, pen);
+    HGDIOBJ old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+    GetWindowRect(list, &bounds);
+    RoundRect(dc, 0, 0, bounds.right - bounds.left, bounds.bottom - bounds.top, 16, 16);
+    SelectObject(dc, old_brush);
+    SelectObject(dc, previous);
+    DeleteObject(pen);
+    ReleaseDC(list, dc);
+    return 0;
+  }
+  if (message == WM_WINDOWPOSCHANGED) {
+    const WINDOWPOS *position = (const WINDOWPOS *)lparam;
+    LRESULT result = CallWindowProcA(g_picker_list_proc, list, message, wparam, lparam);
+    if (!(position->flags & SWP_NOSIZE)) {
+      RECT bounds;
+      HRGN outline;
+      GetWindowRect(list, &bounds);
+      outline = CreateRoundRectRgn(0, 0, bounds.right - bounds.left + 1,
+        bounds.bottom - bounds.top + 1, 16, 16);
+      if (outline != NULL && !SetWindowRgn(list, outline, TRUE)) DeleteObject(outline);
+    }
+    return result;
+  }
+  return CallWindowProcA(g_picker_list_proc, list, message, wparam, lparam);
+}
+
 static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
   switch (message) {
   case WM_CREATE: {
     char error[256];
     size_t algorithm_index;
+    COMBOBOXINFO picker_info = { 0 };
 
     g_run_button = CreateWindowExA(0, "BUTTON", "Run demo",
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160, 44,
@@ -635,16 +785,24 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 808, 571, 222, 38,
       window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
     g_algorithm_picker = CreateWindowExA(0, "COMBOBOX", "Algorithm",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST,
-      790, 291, 262, 180, window, (HMENU)(INT_PTR)ID_ALGORITHM,
+      WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
+      790, 286, 262, 200, window, (HMENU)(INT_PTR)ID_ALGORITHM,
       GetModuleHandleA(NULL), NULL);
     SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
+    SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, (WPARAM)-1, 38);
+    SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, 0, 60);
     for (algorithm_index = 0; algorithm_index < crypto_algorithm_count(); ++algorithm_index) {
       const CryptoInfo *entry = crypto_algorithm_at(algorithm_index);
       LRESULT row = SendMessageA(g_algorithm_picker, CB_ADDSTRING, 0, (LPARAM)entry->name);
       if (row >= 0) SendMessageA(g_algorithm_picker, CB_SETITEMDATA, (WPARAM)row, entry->id);
     }
     SendMessageA(g_algorithm_picker, CB_SETCURSEL, 0, 0);
+    g_picker_brush = CreateSolidBrush(COLOR_PANEL);
+    g_picker_proc = (WNDPROC)SetWindowLongPtrA(g_algorithm_picker, GWLP_WNDPROC, (LONG_PTR)algorithm_picker_proc);
+    picker_info.cbSize = sizeof(picker_info);
+    if (GetComboBoxInfo(g_algorithm_picker, &picker_info)) {
+      g_picker_list_proc = (WNDPROC)SetWindowLongPtrA(picker_info.hwndList, GWLP_WNDPROC, (LONG_PTR)algorithm_list_proc);
+    }
     g_button_proc = (WNDPROC)SetWindowLongPtrA(g_run_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     SetWindowLongPtrA(g_restore_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
     SetWindowLongPtrA(g_note_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
@@ -666,10 +824,27 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   case WM_COMMAND:
     switch (LOWORD(wparam)) {
     case ID_ALGORITHM:
+      if (HIWORD(wparam) == CBN_DROPDOWN || HIWORD(wparam) == CBN_CLOSEUP) {
+        g_picker_open = HIWORD(wparam) == CBN_DROPDOWN;
+        if (g_picker_open) g_picker_initial = g_selected_algorithm;
+        InvalidateRect(g_algorithm_picker, NULL, FALSE);
+      }
+      if (HIWORD(wparam) == CBN_SELENDCANCEL && g_state == DEMO_READY) {
+        size_t index;
+        g_selected_algorithm = g_picker_initial;
+        for (index = 0; index < crypto_algorithm_count(); ++index) {
+          if (crypto_algorithm_at(index)->id == g_selected_algorithm) {
+            SendMessageA(g_algorithm_picker, CB_SETCURSEL, index, 0);
+            break;
+          }
+        }
+        InvalidateRect(window, NULL, FALSE);
+      }
       if (HIWORD(wparam) == CBN_SELCHANGE && g_state == DEMO_READY) {
         LRESULT row = SendMessageA(g_algorithm_picker, CB_GETCURSEL, 0, 0);
         CryptoAlgorithm selected = (CryptoAlgorithm)SendMessageA(g_algorithm_picker, CB_GETITEMDATA, (WPARAM)row, 0);
         if (crypto_algorithm_info(selected) != NULL) g_selected_algorithm = selected;
+        InvalidateRect(g_algorithm_picker, NULL, FALSE);
         InvalidateRect(window, NULL, FALSE);
       }
       return 0;
@@ -685,7 +860,22 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       return 0;
     }
     break;
+  case WM_MEASUREITEM:
+    if (wparam == ID_ALGORITHM) {
+      MEASUREITEMSTRUCT *item = (MEASUREITEMSTRUCT *)lparam;
+      item->itemHeight = 60;
+      return TRUE;
+    }
+    break;
+  case WM_CTLCOLORLISTBOX:
+    SetTextColor((HDC)wparam, COLOR_TEXT);
+    SetBkColor((HDC)wparam, COLOR_PANEL);
+    return (LRESULT)g_picker_brush;
   case WM_DRAWITEM:
+    if (wparam == ID_ALGORITHM) {
+      draw_algorithm_option((const DRAWITEMSTRUCT *)lparam);
+      return TRUE;
+    }
     if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE ||
         wparam == ID_TRANSFER || wparam == ID_RECEIPT || wparam == ID_VIEW) {
       draw_button((const DRAWITEMSTRUCT *)lparam);
@@ -734,6 +924,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
     if (g_font_body != NULL) DeleteObject(g_font_body);
     if (g_font_small != NULL) DeleteObject(g_font_small);
     if (g_font_mono != NULL) DeleteObject(g_font_mono);
+    if (g_picker_brush != NULL) DeleteObject(g_picker_brush);
     PostQuitMessage(0);
     return 0;
   }
