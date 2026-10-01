@@ -10,13 +10,13 @@ The sample text assets are embedded into the executable at build time, so the GU
 
 From this directory:
 
-```sh
+```bash
 make
 ```
 
 Or invoke the compiler directly:
 
-```sh
+```bash
 x86_64-w64-mingw32-windres -i src/assets.rc -O coff -o meoware-assets.o
 x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Wpedantic \
   -Iinclude -mwindows -o meoware.exe \
