@@ -7,12 +7,14 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include "tea.h"
+#include "xtea.h"
 
 #define CRYPTO_MAX_BLOCK_SIZE 16U
 
 typedef enum {
     CRYPTO_AES256_CBC = 1,
-    CRYPTO_TEA128_CBC = 2
+    CRYPTO_TEA128_CBC = 2,
+    CRYPTO_XTEA128_CBC = 3
 } CryptoAlgorithm;
 
 typedef struct {
@@ -29,7 +31,7 @@ const CryptoInfo *crypto_algorithm_info(CryptoAlgorithm id);
 typedef struct {
     CryptoAlgorithm selected;
     bool initialized;
-    unsigned char tea_key[TEA_KEY_SIZE];
+    unsigned char portable_key[TEA_KEY_SIZE];
     BCRYPT_ALG_HANDLE algorithm;
     BCRYPT_KEY_HANDLE key;
     unsigned char *key_object;

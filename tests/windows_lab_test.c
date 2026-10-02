@@ -70,6 +70,10 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
     sample_path(path, &lab, 1, true);
     change_header(path, 4, 99);
     assert(!lab_restore_samples(&lab, error, sizeof(error)));
+    /* TEA and XTEA share block/key sizes but must never share a format ID. */
+    change_header(path, 4, (unsigned char)(algorithm == CRYPTO_TEA128_CBC
+      ? CRYPTO_XTEA128_CBC : CRYPTO_TEA128_CBC));
+    assert(!lab_restore_samples(&lab, error, sizeof(error)));
     change_header(path, 4, (unsigned char)algorithm);
     change_header(path, 5, 0);
     assert(!lab_restore_samples(&lab, error, sizeof(error)));
@@ -96,8 +100,28 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
   assert(RemoveDirectoryA(directory));
 }
 
+static void check_xtea_dispatch(void) {
+  /* Crypto++ XTEA test 32; verifies dispatch as well as the block function. */
+  const unsigned char key[16] = {
+    0x27,0xf9,0x17,0xb1,0xc1,0xda,0x89,0x93,0x60,0xe2,0xac,0xaa,0xa6,0xeb,0x92,0x3d
+  };
+  const unsigned char plain[8] = { 0xaf,0x20,0xa3,0x90,0x54,0x75,0x71,0xaa };
+  const unsigned char expected[8] = { 0xd2,0x64,0x28,0xaf,0x0a,0x20,0x22,0x83 };
+  unsigned char iv[16] = { 0 }, encrypted[16], restored[16];
+  CryptoContext context;
+  ULONG encrypted_size, restored_size;
+  assert(crypto_init(&context, CRYPTO_XTEA128_CBC));
+  memcpy(context.portable_key, key, sizeof(key));
+  assert(crypto_encrypt(&context, iv, plain, sizeof(plain), encrypted, sizeof(encrypted), &encrypted_size));
+  assert(encrypted_size == sizeof(encrypted) && memcmp(encrypted, expected, sizeof(expected)) == 0);
+  assert(crypto_decrypt(&context, iv, encrypted, encrypted_size, restored, sizeof(restored), &restored_size));
+  assert(restored_size == sizeof(plain) && memcmp(restored, plain, sizeof(plain)) == 0);
+  crypto_close(&context);
+}
+
 int main(void) {
   size_t index;
+  check_xtea_dispatch();
   assert(crypto_algorithm_info((CryptoAlgorithm)99) == NULL);
   assert(crypto_algorithm_at(crypto_algorithm_count()) == NULL);
   for (index = 0; index < crypto_algorithm_count(); ++index) {

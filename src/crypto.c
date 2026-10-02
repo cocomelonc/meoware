@@ -7,9 +7,12 @@
 #define AES_KEY_SIZE 32
 #define AES_BLOCK_SIZE 16
 
+_Static_assert(TEA_KEY_SIZE == XTEA_KEY_SIZE, "TEA-family key storage must fit both ciphers");
+
 static const CryptoInfo algorithms[] = {
   { CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE },
-  { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE }
+  { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE },
+  { CRYPTO_XTEA128_CBC, "XTEA-128-CBC", XTEA_KEY_SIZE, XTEA_BLOCK_SIZE }
 };
 
 size_t crypto_algorithm_count(void) { return sizeof(algorithms) / sizeof(algorithms[0]); }
@@ -44,8 +47,8 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   memset(key_bytes, 0, sizeof(key_bytes));
   if (crypto_algorithm_info(selected) == NULL) return false;
   context->selected = selected;
-  if (selected == CRYPTO_TEA128_CBC) {
-    if (!crypto_random(context->tea_key, sizeof(context->tea_key))) goto failure;
+  if (selected == CRYPTO_TEA128_CBC || selected == CRYPTO_XTEA128_CBC) {
+    if (!crypto_random(context->portable_key, sizeof(context->portable_key))) goto failure;
     context->initialized = true;
     return true;
   }
@@ -144,8 +147,16 @@ static bool crypt_buffer(CryptoContext *context,
   if (context->selected == CRYPTO_TEA128_CBC) {
     size_t written = 0;
     bool success = encrypt
-      ? tea_cbc_encrypt(context->tea_key, iv, input, input_size, output, output_capacity, &written)
-      : tea_cbc_decrypt(context->tea_key, iv, input, input_size, output, output_capacity, &written);
+      ? tea_cbc_encrypt(context->portable_key, iv, input, input_size, output, output_capacity, &written)
+      : tea_cbc_decrypt(context->portable_key, iv, input, input_size, output, output_capacity, &written);
+    if (success) *output_size = (ULONG)written;
+    return success;
+  }
+  if (context->selected == CRYPTO_XTEA128_CBC) {
+    size_t written = 0;
+    bool success = encrypt
+      ? xtea_cbc_encrypt(context->portable_key, iv, input, input_size, output, output_capacity, &written)
+      : xtea_cbc_decrypt(context->portable_key, iv, input, input_size, output, output_capacity, &written);
     if (success) *output_size = (ULONG)written;
     return success;
   }
