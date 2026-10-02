@@ -1,6 +1,6 @@
 /* author: cocomelonc */
 #include "xtea.h"
-#include "cbc64.h"
+#include "cbc.h"
 
 /* Needham and Wheeler, Tea extensions (1997):
  * https://www.cix.co.uk/~klockstone/xtea.pdf */
@@ -55,10 +55,10 @@ void xtea_decrypt_block(uint8_t block[XTEA_BLOCK_SIZE], const uint8_t key[XTEA_K
 
 bool xtea_cbc_encrypt(const uint8_t key[XTEA_KEY_SIZE], const uint8_t iv[XTEA_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_encrypt(xtea_encrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_encrypt(xtea_encrypt_block, XTEA_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }
 
 bool xtea_cbc_decrypt(const uint8_t key[XTEA_KEY_SIZE], const uint8_t iv[XTEA_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_decrypt(xtea_decrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_decrypt(xtea_decrypt_block, XTEA_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }

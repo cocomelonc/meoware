@@ -9,6 +9,7 @@
 #include "tea.h"
 #include "xtea.h"
 #include "rc5.h"
+#include "rc6.h"
 
 #define CRYPTO_MAX_BLOCK_SIZE 16U
 
@@ -16,7 +17,8 @@ typedef enum {
     CRYPTO_AES256_CBC = 1,
     CRYPTO_TEA128_CBC = 2,
     CRYPTO_XTEA128_CBC = 3,
-    CRYPTO_RC5128_CBC = 4
+    CRYPTO_RC5128_CBC = 4,
+    CRYPTO_RC6128_CBC = 5
 } CryptoAlgorithm;
 
 typedef struct {

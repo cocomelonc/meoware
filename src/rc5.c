@@ -1,6 +1,6 @@
 /* author: cocomelonc */
 #include "rc5.h"
-#include "cbc64.h"
+#include "cbc.h"
 
 /* RC5 key expansion and block transform: https://www.rfc-editor.org/rfc/rfc2040 */
 #define RC5_SUBKEYS (2U * (RC5_ROUNDS + 1U))
@@ -78,10 +78,10 @@ void rc5_decrypt_block(uint8_t block[RC5_BLOCK_SIZE], const uint8_t key[RC5_KEY_
 
 bool rc5_cbc_encrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_encrypt(rc5_encrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_encrypt(rc5_encrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }
 
 bool rc5_cbc_decrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_decrypt(rc5_decrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_decrypt(rc5_decrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }

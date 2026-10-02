@@ -107,7 +107,7 @@ static void check_portable_dispatch(void) {
   /* Crypto++ known answers also verify that dispatch selects the right cipher. */
   const struct {
     CryptoAlgorithm algorithm;
-    unsigned char key[16], plain[8], expected[8];
+    unsigned char key[16], plain[16], expected[16];
   } cases[] = {
     { CRYPTO_XTEA128_CBC,
       { 0x27,0xf9,0x17,0xb1,0xc1,0xda,0x89,0x93,0x60,0xe2,0xac,0xaa,0xa6,0xeb,0x92,0x3d },
@@ -116,18 +116,23 @@ static void check_portable_dispatch(void) {
     { CRYPTO_RC5128_CBC,
       { 0x91,0x5f,0x46,0x19,0xbe,0x41,0xb2,0x51,0x63,0x55,0xa5,0x01,0x10,0xa9,0xce,0x91 },
       { 0x21,0xa5,0xdb,0xee,0x15,0x4b,0x8f,0x6d },
-      { 0xf7,0xc0,0x13,0xac,0x5b,0x2b,0x89,0x52 } }
+      { 0xf7,0xc0,0x13,0xac,0x5b,0x2b,0x89,0x52 } },
+    { CRYPTO_RC6128_CBC,
+      { 0x01,0x23,0x45,0x67,0x89,0xab,0xcd,0xef,0x01,0x12,0x23,0x34,0x45,0x56,0x67,0x78 },
+      { 0x02,0x13,0x24,0x35,0x46,0x57,0x68,0x79,0x8a,0x9b,0xac,0xbd,0xce,0xdf,0xe0,0xf1 },
+      { 0x52,0x4e,0x19,0x2f,0x47,0x15,0xc6,0x23,0x1f,0x51,0xf6,0x36,0x7e,0xa4,0x3f,0x18 } }
   };
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-    unsigned char iv[16] = { 0 }, encrypted[16], restored[16];
+    unsigned char iv[16] = { 0 }, encrypted[32], restored[32];
+    ULONG block_size = crypto_algorithm_info(cases[i].algorithm)->block_size;
     CryptoContext context;
     ULONG encrypted_size, restored_size;
     assert(crypto_init(&context, cases[i].algorithm));
     memcpy(context.portable_key, cases[i].key, sizeof(cases[i].key));
-    assert(crypto_encrypt(&context, iv, cases[i].plain, 8, encrypted, sizeof(encrypted), &encrypted_size));
-    assert(encrypted_size == sizeof(encrypted) && memcmp(encrypted, cases[i].expected, 8) == 0);
+    assert(crypto_encrypt(&context, iv, cases[i].plain, block_size, encrypted, sizeof(encrypted), &encrypted_size));
+    assert(encrypted_size == 2 * block_size && memcmp(encrypted, cases[i].expected, block_size) == 0);
     assert(crypto_decrypt(&context, iv, encrypted, encrypted_size, restored, sizeof(restored), &restored_size));
-    assert(restored_size == 8 && memcmp(restored, cases[i].plain, 8) == 0);
+    assert(restored_size == block_size && memcmp(restored, cases[i].plain, block_size) == 0);
     crypto_close(&context);
   }
 }

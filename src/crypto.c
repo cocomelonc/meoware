@@ -1,6 +1,6 @@
 /* author: cocomelonc */
 #include "crypto.h"
-#include "cbc64.h"
+#include "cbc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -8,14 +8,15 @@
 #define AES_KEY_SIZE 32
 #define AES_BLOCK_SIZE 16
 
-_Static_assert(TEA_KEY_SIZE == XTEA_KEY_SIZE && TEA_KEY_SIZE == RC5_KEY_SIZE,
+_Static_assert(TEA_KEY_SIZE == XTEA_KEY_SIZE && TEA_KEY_SIZE == RC5_KEY_SIZE && TEA_KEY_SIZE == RC6_KEY_SIZE,
   "Portable key storage must fit each cipher");
 
 static const CryptoInfo algorithms[] = {
   { CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE },
   { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE },
   { CRYPTO_XTEA128_CBC, "XTEA-128-CBC", XTEA_KEY_SIZE, XTEA_BLOCK_SIZE },
-  { CRYPTO_RC5128_CBC, "RC5-128-CBC", RC5_KEY_SIZE, RC5_BLOCK_SIZE }
+  { CRYPTO_RC5128_CBC, "RC5-128-CBC", RC5_KEY_SIZE, RC5_BLOCK_SIZE },
+  { CRYPTO_RC6128_CBC, "RC6-128-CBC", RC6_KEY_SIZE, RC6_BLOCK_SIZE }
 };
 
 size_t crypto_algorithm_count(void) { return sizeof(algorithms) / sizeof(algorithms[0]); }
@@ -50,7 +51,7 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   memset(key_bytes, 0, sizeof(key_bytes));
   if (crypto_algorithm_info(selected) == NULL) return false;
   context->selected = selected;
-  if (selected == CRYPTO_TEA128_CBC || selected == CRYPTO_XTEA128_CBC || selected == CRYPTO_RC5128_CBC) {
+  if (selected != CRYPTO_AES256_CBC) {
     if (!crypto_random(context->portable_key, sizeof(context->portable_key))) goto failure;
     context->initialized = true;
     return true;
@@ -139,7 +140,7 @@ static bool crypt_buffer(CryptoContext *context,
              ULONG *output_size) {
   unsigned char iv_copy[AES_BLOCK_SIZE];
   NTSTATUS status;
-  Cbc64BlockTransform transform = NULL;
+  CbcBlockTransform transform = NULL;
 
   if (output_size != NULL) *output_size = 0;
   if (context == NULL || !context->initialized || iv == NULL ||
@@ -152,13 +153,15 @@ static bool crypt_buffer(CryptoContext *context,
   case CRYPTO_TEA128_CBC: transform = encrypt ? tea_encrypt_block : tea_decrypt_block; break;
   case CRYPTO_XTEA128_CBC: transform = encrypt ? xtea_encrypt_block : xtea_decrypt_block; break;
   case CRYPTO_RC5128_CBC: transform = encrypt ? rc5_encrypt_block : rc5_decrypt_block; break;
+  case CRYPTO_RC6128_CBC: transform = encrypt ? rc6_encrypt_block : rc6_decrypt_block; break;
   default: break;
   }
   if (transform != NULL) {
     size_t written = 0;
+    size_t block_size = crypto_algorithm_info(context->selected)->block_size;
     bool success = encrypt
-      ? cbc64_encrypt(transform, context->portable_key, iv, input, input_size, output, output_capacity, &written)
-      : cbc64_decrypt(transform, context->portable_key, iv, input, input_size, output, output_capacity, &written);
+      ? cbc_encrypt(transform, block_size, context->portable_key, iv, input, input_size, output, output_capacity, &written)
+      : cbc_decrypt(transform, block_size, context->portable_key, iv, input, input_size, output, output_capacity, &written);
     if (success) *output_size = (ULONG)written;
     return success;
   }

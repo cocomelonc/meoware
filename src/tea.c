@@ -1,6 +1,6 @@
 /* author: cocomelonc */
 #include "tea.h"
-#include "cbc64.h"
+#include "cbc.h"
 
 /* Wheeler and Needham, TEA (1994):
  * https://www.cl.cam.ac.uk/ftp/papers/djw-rmn/djw-rmn-tea.html */
@@ -55,10 +55,10 @@ void tea_decrypt_block(uint8_t block[TEA_BLOCK_SIZE], const uint8_t key[TEA_KEY_
 
 bool tea_cbc_encrypt(const uint8_t key[TEA_KEY_SIZE], const uint8_t iv[TEA_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_encrypt(tea_encrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_encrypt(tea_encrypt_block, TEA_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }
 
 bool tea_cbc_decrypt(const uint8_t key[TEA_KEY_SIZE], const uint8_t iv[TEA_BLOCK_SIZE],
   const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc64_decrypt(tea_decrypt_block, key, iv, input, length, output, capacity, written);
+  return cbc_decrypt(tea_decrypt_block, TEA_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
 }

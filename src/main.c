@@ -786,7 +786,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
     g_algorithm_picker = CreateWindowExA(0, "COMBOBOX", "Algorithm",
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
-      790, 286, 262, 320, window, (HMENU)(INT_PTR)ID_ALGORITHM,
+      790, 286, 262, 380, window, (HMENU)(INT_PTR)ID_ALGORITHM,
       GetModuleHandleA(NULL), NULL);
     SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
     SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, (WPARAM)-1, 38);
