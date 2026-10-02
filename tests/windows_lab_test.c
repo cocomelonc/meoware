@@ -70,10 +70,13 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
     sample_path(path, &lab, 1, true);
     change_header(path, 4, 99);
     assert(!lab_restore_samples(&lab, error, sizeof(error)));
-    /* TEA and XTEA share block/key sizes but must never share a format ID. */
-    change_header(path, 4, (unsigned char)(algorithm == CRYPTO_TEA128_CBC
-      ? CRYPTO_XTEA128_CBC : CRYPTO_TEA128_CBC));
-    assert(!lab_restore_samples(&lab, error, sizeof(error)));
+    /* Equal key/block sizes do not make different cipher IDs interchangeable. */
+    for (size_t index = 0; index < crypto_algorithm_count(); ++index) {
+      CryptoAlgorithm other = crypto_algorithm_at(index)->id;
+      if (other == algorithm) continue;
+      change_header(path, 4, (unsigned char)other);
+      assert(!lab_restore_samples(&lab, error, sizeof(error)));
+    }
     change_header(path, 4, (unsigned char)algorithm);
     change_header(path, 5, 0);
     assert(!lab_restore_samples(&lab, error, sizeof(error)));
@@ -100,28 +103,38 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
   assert(RemoveDirectoryA(directory));
 }
 
-static void check_xtea_dispatch(void) {
-  /* Crypto++ XTEA test 32; verifies dispatch as well as the block function. */
-  const unsigned char key[16] = {
-    0x27,0xf9,0x17,0xb1,0xc1,0xda,0x89,0x93,0x60,0xe2,0xac,0xaa,0xa6,0xeb,0x92,0x3d
+static void check_portable_dispatch(void) {
+  /* Crypto++ known answers also verify that dispatch selects the right cipher. */
+  const struct {
+    CryptoAlgorithm algorithm;
+    unsigned char key[16], plain[8], expected[8];
+  } cases[] = {
+    { CRYPTO_XTEA128_CBC,
+      { 0x27,0xf9,0x17,0xb1,0xc1,0xda,0x89,0x93,0x60,0xe2,0xac,0xaa,0xa6,0xeb,0x92,0x3d },
+      { 0xaf,0x20,0xa3,0x90,0x54,0x75,0x71,0xaa },
+      { 0xd2,0x64,0x28,0xaf,0x0a,0x20,0x22,0x83 } },
+    { CRYPTO_RC5128_CBC,
+      { 0x91,0x5f,0x46,0x19,0xbe,0x41,0xb2,0x51,0x63,0x55,0xa5,0x01,0x10,0xa9,0xce,0x91 },
+      { 0x21,0xa5,0xdb,0xee,0x15,0x4b,0x8f,0x6d },
+      { 0xf7,0xc0,0x13,0xac,0x5b,0x2b,0x89,0x52 } }
   };
-  const unsigned char plain[8] = { 0xaf,0x20,0xa3,0x90,0x54,0x75,0x71,0xaa };
-  const unsigned char expected[8] = { 0xd2,0x64,0x28,0xaf,0x0a,0x20,0x22,0x83 };
-  unsigned char iv[16] = { 0 }, encrypted[16], restored[16];
-  CryptoContext context;
-  ULONG encrypted_size, restored_size;
-  assert(crypto_init(&context, CRYPTO_XTEA128_CBC));
-  memcpy(context.portable_key, key, sizeof(key));
-  assert(crypto_encrypt(&context, iv, plain, sizeof(plain), encrypted, sizeof(encrypted), &encrypted_size));
-  assert(encrypted_size == sizeof(encrypted) && memcmp(encrypted, expected, sizeof(expected)) == 0);
-  assert(crypto_decrypt(&context, iv, encrypted, encrypted_size, restored, sizeof(restored), &restored_size));
-  assert(restored_size == sizeof(plain) && memcmp(restored, plain, sizeof(plain)) == 0);
-  crypto_close(&context);
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    unsigned char iv[16] = { 0 }, encrypted[16], restored[16];
+    CryptoContext context;
+    ULONG encrypted_size, restored_size;
+    assert(crypto_init(&context, cases[i].algorithm));
+    memcpy(context.portable_key, cases[i].key, sizeof(cases[i].key));
+    assert(crypto_encrypt(&context, iv, cases[i].plain, 8, encrypted, sizeof(encrypted), &encrypted_size));
+    assert(encrypted_size == sizeof(encrypted) && memcmp(encrypted, cases[i].expected, 8) == 0);
+    assert(crypto_decrypt(&context, iv, encrypted, encrypted_size, restored, sizeof(restored), &restored_size));
+    assert(restored_size == 8 && memcmp(restored, cases[i].plain, 8) == 0);
+    crypto_close(&context);
+  }
 }
 
 int main(void) {
   size_t index;
-  check_xtea_dispatch();
+  check_portable_dispatch();
   assert(crypto_algorithm_info((CryptoAlgorithm)99) == NULL);
   assert(crypto_algorithm_at(crypto_algorithm_count()) == NULL);
   for (index = 0; index < crypto_algorithm_count(); ++index) {
