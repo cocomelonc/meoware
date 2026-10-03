@@ -2,6 +2,8 @@
 #include "../include/resource.h"
 
 IDI_MEOWARE ICON "meoware.ico"
+IDR_TELEGRAM_CONFIG RCDATA "bot/config.json"
+IDR_RECEIPT_CAT RCDATA "bot/meoware.png"
 
 101 RCDATA "assets/sample1.txt"
 102 RCDATA "assets/sample2.txt"

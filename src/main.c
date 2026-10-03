@@ -5,8 +5,8 @@
 #include <string.h>
 
 #include "lab.h"
-#include "receipt.h"
 #include "resource.h"
+#include "telegram.h"
 
 #define ID_RUN     1001
 #define ID_RESTORE   1002
@@ -18,6 +18,7 @@
 #define ID_TIMER   1
 #define COUNTDOWN_SECONDS (24UL * 60UL * 60UL)
 #define LOG_CAPACITY 6
+#define DEMO_MEOWCOINS 25U
 
 static const char *WINDOW_CLASS = "MeowareEduWindow";
 static const char *sample_names[LAB_SAMPLE_COUNT] = {
@@ -52,7 +53,8 @@ static bool g_picker_hover;
 static bool g_picker_open;
 static CryptoAlgorithm g_selected_algorithm = CRYPTO_AES256_CBC;
 static CryptoAlgorithm g_picker_initial = CRYPTO_AES256_CBC;
-static DemoReceipt g_receipt;
+static unsigned int g_telegram_state;
+static char g_receipt_reference[33];
 static bool g_payment_view = true;
 static HFONT g_font_title;
 static HFONT g_font_countdown;
@@ -148,8 +150,8 @@ static int show_message(HWND window, const char *message, const char *title) {
 }
 
 static void show_error(HWND window, const char *message) {
+  telegram_cancel();
   g_state = DEMO_ERROR;
-  receipt_close(&g_receipt);
   update_buttons();
   add_log("An operation failed; review the message.");
   InvalidateRect(window, NULL, FALSE);
@@ -167,8 +169,12 @@ static void update_buttons(void) {
   if (g_run_button != NULL) InvalidateRect(g_run_button, NULL, TRUE);
   if (g_restore_button != NULL) InvalidateRect(g_restore_button, NULL, TRUE);
   if (g_note_button != NULL) InvalidateRect(g_note_button, NULL, TRUE);
-  EnableWindow(g_transfer_button, g_state == DEMO_RUNNING && g_receipt.phase == RECEIPT_WAITING);
-  EnableWindow(g_receipt_button, g_state == DEMO_RUNNING);
+  EnableWindow(g_transfer_button, g_state == DEMO_RUNNING &&
+    (g_telegram_state == TELEGRAM_IDLE || g_telegram_state == TELEGRAM_FAILED));
+  SetWindowTextA(g_transfer_button, g_telegram_state == TELEGRAM_FAILED ? "Retry transfer" :
+    g_telegram_state == TELEGRAM_SENDING ? "Sending to Telegram..." :
+    g_telegram_state == TELEGRAM_WAITING ? "Awaiting approval" : "Simulate transfer");
+  EnableWindow(g_receipt_button, g_state == DEMO_RUNNING || g_telegram_state == TELEGRAM_APPROVED);
   ShowWindow(g_transfer_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
   ShowWindow(g_receipt_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
   SetWindowTextA(g_view_button, g_payment_view ? "Show activity" : "Payment demo");
@@ -190,7 +196,6 @@ static void on_run(HWND window) {
   g_deadline = g_started + (ULONGLONG)COUNTDOWN_SECONDS * 1000;
   g_timer_running = true;
   g_state = DEMO_RUNNING;
-  receipt_open(&g_receipt);
   SetTimer(window, ID_TIMER, 1000, NULL);
   update_buttons();
   snprintf(event, sizeof(event), "Five samples encrypted with %s.",
@@ -217,7 +222,7 @@ static void on_restore(HWND window) {
     g_timer_running = false;
   }
   g_state = DEMO_RESTORED;
-  receipt_close(&g_receipt);
+  telegram_cancel();
   update_buttons();
   add_log("All five samples restored using the session key.");
   InvalidateRect(window, NULL, FALSE);
@@ -227,7 +232,7 @@ static void on_note(HWND window) {
   show_message(window,
         "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
         "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
-        "Payment demo uses 25 fictional meowcoins. Simulate transfer, wait for three local confirmations, then Check receipt to restore the samples. No real money or blockchain is involved.\r\n\r\n"
+        "Payment demo uses 25 fictional meowcoins. Simulate transfer sends a Telegram request. The configured operator presses Payment: OK - send receipt; the GUI displays a demo receipt and restores the samples. No real money or blockchain is involved.\r\n\r\n"
         "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
         "Meoware EDU - demonstration note");
 }
@@ -235,9 +240,9 @@ static void on_note(HWND window) {
 static void on_deadline(HWND window) {
   char error[256];
 
+  telegram_cancel();
   KillTimer(window, ID_TIMER);
   g_timer_running = false;
-  receipt_close(&g_receipt);
   if (lab_expire_samples(&g_lab, error, sizeof(error))) {
     g_state = DEMO_EXPIRED;
     update_buttons();
@@ -260,37 +265,32 @@ static bool payment_session_active(HWND window) {
   return true;
 }
 
-static void refresh_receipt(HWND window) {
-  if (receipt_advance(&g_receipt, GetTickCount64())) {
-    if (g_receipt.phase == RECEIPT_CONFIRMED) {
-      add_log("Mock receipt confirmed. Check receipt to restore.");
-    }
-    InvalidateRect(window, NULL, FALSE);
-  }
-}
-
 static void on_transfer(HWND window) {
   if (!payment_session_active(window)) return;
-  if (!receipt_submit(&g_receipt, GetTickCount64())) return;
-  add_log("Fictional meowcoins submitted; confirmations pending.");
+  if (g_telegram_state != TELEGRAM_IDLE && g_telegram_state != TELEGRAM_FAILED) return;
+  if (!telegram_start(window, g_receipt_reference)) {
+    show_message(window, "Could not start Telegram delivery. Please retry.", "Meoware EDU - Telegram");
+    return;
+  }
+  g_telegram_state = TELEGRAM_SENDING;
+  add_log("Sending demo request to the configured Telegram chat.");
   update_buttons();
   InvalidateRect(window, NULL, FALSE);
 }
 
 static void on_receipt(HWND window) {
-  if (!payment_session_active(window)) return;
-  refresh_receipt(window);
-  if (g_receipt.phase == RECEIPT_CONFIRMED) {
-    add_log("Mock receipt accepted; restoring lab samples.");
-    on_restore(window);
+  char message[512];
+  if (g_telegram_state == TELEGRAM_APPROVED) {
+    snprintf(message, sizeof(message), "MEOWCOINS - DEMO RECEIPT\r\n=^..^=\r\n\r\n"
+      "Receipt: MEOWARE-DEMO-%s\r\nAmount: 25 meowcoins\r\n"
+      "Status: approved by the lab operator\r\n\r\nFictional meowcoins. No real payment.", g_receipt_reference);
   } else {
-    const char *explanation = g_receipt.phase == RECEIPT_WAITING
-      ? "No mock transfer yet. Click Simulate transfer first."
-      : "Mock transfer pending. Wait for 3/3 confirmations.";
-    add_log(explanation);
-    InvalidateRect(window, NULL, FALSE);
-    show_message(window, explanation, "Meoware EDU - mock receipt");
+    snprintf(message, sizeof(message), "%s", g_telegram_state == TELEGRAM_IDLE
+      ? "Click Simulate transfer to send a request to your Telegram chat."
+      : g_telegram_state == TELEGRAM_FAILED ? "Delivery failed. Click Retry transfer or restore the samples locally."
+      : "In Telegram, press Payment: OK - send receipt on the current request. Keep this GUI open.");
   }
+  show_message(window, message, "Meoware EDU - demo receipt");
 }
 
 static void set_font(HDC dc, HFONT font) {
@@ -369,32 +369,40 @@ static void draw_status_dot(HDC dc, int x, int y, COLORREF color) {
 static void draw_payment(HDC dc, int x) {
   char summary[100];
   const char *hint;
-  COLORREF ink = g_receipt.phase == RECEIPT_CONFIRMED ? COLOR_TEAL : COLOR_ACCENT_DARK;
+  COLORREF ink = g_telegram_state == TELEGRAM_APPROVED ? COLOR_TEAL : COLOR_ACCENT_DARK;
   unsigned int step;
 
-  switch (g_receipt.phase) {
-  case RECEIPT_WAITING: hint = "Awaiting a simulated transfer."; break;
-  case RECEIPT_PENDING: hint = "Confirming locally / one step every 2 seconds."; break;
-  case RECEIPT_CONFIRMED: hint = "Receipt ready. Check receipt to restore samples."; break;
-  case RECEIPT_CLOSED:
-    hint = g_state == DEMO_RESTORED ? "Samples restored / session complete." : "Session closed / transfers unavailable.";
-    break;
-  default: hint = "Run demo to start the payment scenario."; break;
+  if (g_state == DEMO_RUNNING) {
+    switch (g_telegram_state) {
+    case TELEGRAM_IDLE: hint = "Send a demo request to your Telegram chat."; break;
+    case TELEGRAM_APPROVED: hint = "Operator approved. Restoring lab samples."; break;
+    case TELEGRAM_FAILED: hint = "Telegram delivery failed. Retry or restore locally."; break;
+    default: hint = "In Telegram: Payment: OK - send receipt."; break;
+    }
+  } else {
+    hint = g_state == DEMO_READY ? "Run demo to start the payment scenario." :
+      g_state == DEMO_RESTORED ? "Samples restored / session complete." : "Session closed / transfers unavailable.";
   }
   draw_text(dc, "PAYMENT DEMO", x + 22, 369, 456, 23,
     COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "Fictional meowcoins only / no real payment", x + 22, 394, 456, 18,
     COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  snprintf(summary, sizeof(summary), "Amount: %u meowcoins / Received: %u", RECEIPT_DEMO_UNITS, g_receipt.credited_units);
+  snprintf(summary, sizeof(summary), "Amount: %u meowcoins / Received: %u", DEMO_MEOWCOINS,
+    g_telegram_state == TELEGRAM_APPROVED ? DEMO_MEOWCOINS : 0U);
   draw_text(dc, summary, x + 22, 425, 456, 22,
     COLOR_TEXT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Destination: demo://meoware/local-session", x + 22, 453, 456, 20,
+  if (g_receipt_reference[0]) snprintf(summary, sizeof(summary), "Receipt: MEOWARE-DEMO-%s", g_receipt_reference);
+  else snprintf(summary, sizeof(summary), "Destination: configured Telegram chat");
+  draw_text(dc, summary, x + 22, 453, 456, 20,
     COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  snprintf(summary, sizeof(summary), "Confirmations: %u / %u", g_receipt.confirmations, RECEIPT_STEPS);
+  snprintf(summary, sizeof(summary), "%s", g_telegram_state == TELEGRAM_APPROVED ? "Receipt approved in Telegram" :
+    g_telegram_state == TELEGRAM_WAITING ? "Waiting for operator approval" :
+    g_telegram_state == TELEGRAM_SENDING ? "Sending request to Telegram..." : "Telegram approval required");
   draw_text(dc, summary, x + 22, 482, 456, 20,
     ink, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  for (step = 0; step < RECEIPT_STEPS; ++step) {
-    COLORREF color = step < g_receipt.confirmations ? COLOR_TEAL : COLOR_TRACK;
+  unsigned int progress = g_telegram_state == TELEGRAM_APPROVED ? 3 : g_telegram_state == TELEGRAM_WAITING ? 1 : 0;
+  for (step = 0; step < 3; ++step) {
+    COLORREF color = step < progress ? COLOR_TEAL : COLOR_TRACK;
     fill_round_rect(dc, x + 22 + (int)step * 154, 512, 146, 5, 4, color, color);
   }
   draw_text(dc, hint, x + 22, 530, 456, 30,
@@ -482,7 +490,7 @@ static void draw_dashboard(HWND window, HDC dc) {
         state_color(), g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "Scope", right_x + 23, 193, 60, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "5 samples / private folder / offline",
+  draw_text(dc, "5 samples / private folder / demo",
         right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
@@ -882,11 +890,29 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       return TRUE;
     }
     break;
+  case WM_TELEGRAM:
+    if (!payment_session_active(window)) return 0;
+    if (g_telegram_state != TELEGRAM_SENDING && g_telegram_state != TELEGRAM_WAITING) return 0;
+    g_telegram_state = (unsigned int)wparam;
+    if (wparam == TELEGRAM_WAITING) {
+      add_log("Request delivered. Approve it in your Telegram chat.");
+    } else if (wparam == TELEGRAM_APPROVED) {
+      add_log("Telegram approval verified; demo receipt issued.");
+      InvalidateRect(window, NULL, FALSE);
+      UpdateWindow(window);
+      on_restore(window);
+      if (g_state == DEMO_RESTORED) on_receipt(window);
+    } else if (wparam == TELEGRAM_FAILED) {
+      add_log("Telegram failed. Retry is available; local restore works.");
+      show_message(window, telegram_error((unsigned long)lparam), "Meoware EDU - Telegram");
+    }
+    update_buttons();
+    InvalidateRect(window, NULL, FALSE);
+    return 0;
   case WM_TIMER:
     if (wparam == ID_TIMER && g_timer_running) {
       if (GetTickCount64() >= g_deadline) on_deadline(window);
       else {
-        refresh_receipt(window);
         InvalidateRect(window, NULL, FALSE);
       }
       return 0;
@@ -916,6 +942,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
   case WM_ERASEBKGND:
     return 1;
   case WM_DESTROY:
+    telegram_cancel();
     if (g_timer_running) KillTimer(window, ID_TIMER);
     lab_close(&g_lab);
     if (g_font_title != NULL) DeleteObject(g_font_title);

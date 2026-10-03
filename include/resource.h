@@ -2,5 +2,7 @@
 #define MEOWARE_RESOURCE_H
 
 #define IDI_MEOWARE 1
+#define IDR_TELEGRAM_CONFIG 201
+#define IDR_RECEIPT_CAT 202
 
 #endif
