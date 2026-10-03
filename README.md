@@ -23,6 +23,7 @@ Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is t
 | XTEA-128-CBC | 128 bits | 64 bits | Extended TEA, 32 cycles (64 half-rounds), explicit big-endian words |
 | RC5-128-CBC | 128 bits | 64 bits | RC5-32/12/16, 12 rounds, explicit little-endian words |
 | RC6-128-CBC | 128 bits | 128 bits | RC6-32/20/16, 20 rounds, explicit little-endian words |
+| A5/1 | 64 bits | Stream / 22-bit COUNT in 3 bytes | Majority-clocked 19/22/23-bit LFSRs; continuous file keystream, no GSM burst framing or padding; educational only ([blog #27](https://cocomelonc.github.io/malware/2024/05/12/malware-cryptography-27.html)) |
 
 All three modes use `PKCS#7` padding, a fresh random session key, and a fresh IV per sample. TEA and XTEA have separate block implementations and share CBC/padding handling in `src/cbc64.c`. This is a teaching lab: the CBC records do not provide authenticated encryption.      
 

@@ -181,6 +181,7 @@ bool lab_initialize(LabSession *lab, char *error, size_t error_capacity) {
 
 bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error, size_t error_capacity) {
   unsigned int i;
+  uint32_t frame_base = 0;
   const CryptoInfo *info = crypto_algorithm_info(selected);
 
   if (lab == NULL || !lab->initialized || lab->encrypted || lab->expired ||
@@ -188,7 +189,9 @@ bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error,
     set_error(error, error_capacity, "The lab is not ready for encryption.");
     return false;
   }
-  if (!crypto_init(&lab->crypto, selected)) {
+  if (!crypto_init(&lab->crypto, selected) ||
+      (selected == CRYPTO_A51 && !crypto_random((unsigned char *)&frame_base, sizeof(frame_base)))) {
+    crypto_close(&lab->crypto);
     set_error(error, error_capacity, "Could not initialize the selected cipher and session key.");
     return false;
   }
@@ -208,14 +211,19 @@ bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error,
 
     if (!join_path(input_path, sizeof(input_path), lab->directory, sample_names[i]) ||
       !read_file(input_path, &plain, &plain_size) ||
-      !crypto_random(iv, info->block_size)) {
+      (selected != CRYPTO_A51 && !crypto_random(iv, info->iv_size))) {
       goto encrypt_failure;
+    }
+    if (selected == CRYPTO_A51) {
+      /* Distinct 22-bit seeds for the five files; a fresh key each session. */
+      uint32_t frame = (frame_base + i) & A51_FRAME_MASK;
+      for (unsigned int byte = 0; byte < A51_IV_SIZE; ++byte) iv[byte] = (unsigned char)(frame >> (8 * byte));
     }
     if (plain_size > MAX_SAMPLE_SIZE) {
       goto encrypt_failure;
     }
     cipher_capacity = plain_size + info->block_size;
-    cipher = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_capacity);
+    cipher = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_capacity ? cipher_capacity : 1);
     if (cipher == NULL ||
       !crypto_encrypt(&lab->crypto, iv, plain, plain_size,
               cipher, cipher_capacity, &cipher_size)) {
@@ -229,8 +237,8 @@ bool lab_encrypt_samples(LabSession *lab, CryptoAlgorithm selected, char *error,
     memset(record, 0, HEADER_SIZE);
     memcpy(record, "MWA2", 4);
     record[4] = (unsigned char)selected;
-    record[5] = (unsigned char)info->block_size;
-    memcpy(record + 8, iv, info->block_size);
+    record[5] = (unsigned char)info->iv_size;
+    memcpy(record + 8, iv, info->iv_size);
     memcpy(record + HEADER_SIZE, cipher, cipher_size);
 
     snprintf(output_name, sizeof(output_name), "%s.meoware", sample_names[i]);
@@ -295,16 +303,16 @@ bool lab_restore_samples(LabSession *lab, char *error, size_t error_capacity) {
     if (!join_path(input_path, sizeof(input_path), lab->directory, input_name) ||
       !join_path(output_path, sizeof(output_path), lab->directory, sample_names[i]) ||
       !read_file(input_path, &record, &record_size) ||
-      record_size <= HEADER_SIZE || memcmp(record, "MWA2", 4) != 0 ||
-      record[4] != (unsigned char)info->id || record[5] != info->block_size ||
+      record_size < HEADER_SIZE || memcmp(record, "MWA2", 4) != 0 ||
+      record[4] != (unsigned char)info->id || record[5] != info->iv_size ||
       record[6] != 0 || record[7] != 0 ||
-      (record_size - HEADER_SIZE) % info->block_size != 0) {
+      (info->block_size && (record_size == HEADER_SIZE || (record_size - HEADER_SIZE) % info->block_size != 0))) {
       goto restore_failure;
     }
     cipher = record + HEADER_SIZE;
     cipher_size = record_size - HEADER_SIZE;
-    memcpy(iv, record + 8, info->block_size);
-    plain = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_size);
+    memcpy(iv, record + 8, info->iv_size);
+    plain = (unsigned char *)HeapAlloc(GetProcessHeap(), 0, cipher_size ? cipher_size : 1);
     if (plain == NULL ||
       !crypto_decrypt(&lab->crypto, iv, cipher, cipher_size,
               plain, cipher_size, &plain_size) ||

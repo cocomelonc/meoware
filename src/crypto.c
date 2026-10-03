@@ -10,13 +10,15 @@
 
 _Static_assert(TEA_KEY_SIZE == XTEA_KEY_SIZE && TEA_KEY_SIZE == RC5_KEY_SIZE && TEA_KEY_SIZE == RC6_KEY_SIZE,
   "Portable key storage must fit each cipher");
+_Static_assert(A51_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit A5/1");
 
 static const CryptoInfo algorithms[] = {
-  { CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE },
-  { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE },
-  { CRYPTO_XTEA128_CBC, "XTEA-128-CBC", XTEA_KEY_SIZE, XTEA_BLOCK_SIZE },
-  { CRYPTO_RC5128_CBC, "RC5-128-CBC", RC5_KEY_SIZE, RC5_BLOCK_SIZE },
-  { CRYPTO_RC6128_CBC, "RC6-128-CBC", RC6_KEY_SIZE, RC6_BLOCK_SIZE }
+  { CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE, AES_BLOCK_SIZE },
+  { CRYPTO_TEA128_CBC, "TEA-128-CBC", TEA_KEY_SIZE, TEA_BLOCK_SIZE, TEA_BLOCK_SIZE },
+  { CRYPTO_XTEA128_CBC, "XTEA-128-CBC", XTEA_KEY_SIZE, XTEA_BLOCK_SIZE, XTEA_BLOCK_SIZE },
+  { CRYPTO_RC5128_CBC, "RC5-128-CBC", RC5_KEY_SIZE, RC5_BLOCK_SIZE, RC5_BLOCK_SIZE },
+  { CRYPTO_RC6128_CBC, "RC6-128-CBC", RC6_KEY_SIZE, RC6_BLOCK_SIZE, RC6_BLOCK_SIZE },
+  { CRYPTO_A51, "A5/1", A51_KEY_SIZE, 0, A51_IV_SIZE }
 };
 
 size_t crypto_algorithm_count(void) { return sizeof(algorithms) / sizeof(algorithms[0]); }
@@ -52,7 +54,7 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   if (crypto_algorithm_info(selected) == NULL) return false;
   context->selected = selected;
   if (selected != CRYPTO_AES256_CBC) {
-    if (!crypto_random(context->portable_key, sizeof(context->portable_key))) goto failure;
+    if (!crypto_random(context->portable_key, crypto_algorithm_info(selected)->key_size)) goto failure;
     context->initialized = true;
     return true;
   }
@@ -150,6 +152,13 @@ static bool crypt_buffer(CryptoContext *context,
   }
 
   switch (context->selected) {
+  case CRYPTO_A51: {
+    uint32_t frame = (uint32_t)iv[0] | ((uint32_t)iv[1] << 8) | ((uint32_t)iv[2] << 16);
+    size_t written = 0;
+    bool success = a51_crypt(context->portable_key, frame, input, input_size, output, output_capacity, &written);
+    if (success) *output_size = (ULONG)written;
+    return success;
+  }
   case CRYPTO_TEA128_CBC: transform = encrypt ? tea_encrypt_block : tea_decrypt_block; break;
   case CRYPTO_XTEA128_CBC: transform = encrypt ? xtea_encrypt_block : xtea_decrypt_block; break;
   case CRYPTO_RC5128_CBC: transform = encrypt ? rc5_encrypt_block : rc5_decrypt_block; break;

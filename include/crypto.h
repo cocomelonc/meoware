@@ -10,6 +10,7 @@
 #include "xtea.h"
 #include "rc5.h"
 #include "rc6.h"
+#include "a51.h"
 
 #define CRYPTO_MAX_BLOCK_SIZE 16U
 
@@ -18,14 +19,16 @@ typedef enum {
     CRYPTO_TEA128_CBC = 2,
     CRYPTO_XTEA128_CBC = 3,
     CRYPTO_RC5128_CBC = 4,
-    CRYPTO_RC6128_CBC = 5
+    CRYPTO_RC6128_CBC = 5,
+    CRYPTO_A51 = 6
 } CryptoAlgorithm;
 
 typedef struct {
     CryptoAlgorithm id;
     const char *name;
     unsigned int key_size;
-    unsigned int block_size;
+    unsigned int block_size; /* Zero for a stream cipher. */
+    unsigned int iv_size;
 } CryptoInfo;
 
 size_t crypto_algorithm_count(void);

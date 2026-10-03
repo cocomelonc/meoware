@@ -493,8 +493,12 @@ static void draw_dashboard(HWND window, HDC dc) {
   draw_text(dc, "5 samples / private folder / demo",
         right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
         DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
-    algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
+  if (algorithm->block_size)
+    snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
+      algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
+  else
+    snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / stream cipher",
+      algorithm->name, algorithm->key_size * 8);
   draw_text(dc, algorithm_text, right_x + 23, 220, 456, 18,
         COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "ALGORITHM", 790, 267, 262, 17, COLOR_MUTED,
@@ -687,7 +691,10 @@ static void draw_algorithm_option(const DRAWITEMSTRUCT *item) {
       }
       draw_text(item->hDC, algorithm->name, r.left + 16, r.top + 9, r.right - r.left - 52,
         21, COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-      snprintf(detail, sizeof(detail), "%u-bit key / %u-bit block", algorithm->key_size * 8, algorithm->block_size * 8);
+      if (algorithm->block_size)
+        snprintf(detail, sizeof(detail), "%u-bit key / %u-bit block", algorithm->key_size * 8, algorithm->block_size * 8);
+      else
+        snprintf(detail, sizeof(detail), "%u-bit key / stream cipher", algorithm->key_size * 8);
       draw_text(item->hDC, detail, r.left + 16, r.top + 32, r.right - r.left - 32,
         18, COLOR_MUTED, g_font_small, DT_LEFT | DT_SINGLELINE);
       if (selected) {
@@ -794,7 +801,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
     g_algorithm_picker = CreateWindowExA(0, "COMBOBOX", "Algorithm",
       WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
-      790, 286, 262, 380, window, (HMENU)(INT_PTR)ID_ALGORITHM,
+      790, 286, 262, 440, window, (HMENU)(INT_PTR)ID_ALGORITHM,
       GetModuleHandleA(NULL), NULL);
     SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
     SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, (WPARAM)-1, 38);

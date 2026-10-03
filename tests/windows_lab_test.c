@@ -40,15 +40,24 @@ static void change_header(const char *path, long offset, unsigned char value) {
   assert(fclose(file) == 0);
 }
 
-static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
+static void check_algorithm(CryptoAlgorithm algorithm, bool expire, bool empty) {
   LabSession lab;
   const CryptoInfo *info = crypto_algorithm_info(algorithm);
   char error[256], path[MAX_PATH], directory[MAX_PATH];
   unsigned char header[24];
+  unsigned char first_frame_high = 0;
+  uint32_t frames[LAB_SAMPLE_COUNT] = { 0 };
   unsigned int sample;
   FILE *file;
   assert(lab_initialize(&lab, error, sizeof(error)));
   check_samples(&lab);
+  if (empty) {
+    for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
+      sample_path(path, &lab, sample, false);
+      file = fopen(path, "wb");
+      assert(file && fclose(file) == 0);
+    }
+  }
   assert(!lab_encrypt_samples(&lab, (CryptoAlgorithm)99, error, sizeof(error)));
   assert(lab_encrypt_samples(&lab, algorithm, error, sizeof(error)));
   assert(lab.crypto.selected == algorithm);
@@ -59,9 +68,18 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
     sample_path(path, &lab, sample, true);
     file = fopen(path, "rb");
     assert(file != NULL && fread(header, 1, sizeof(header), file) == sizeof(header));
+    if (algorithm == CRYPTO_A51) {
+      HRSRC resource = FindResourceA(NULL, MAKEINTRESOURCEA(100 + sample), RT_RCDATA);
+      DWORD size = empty ? 0 : SizeofResource(NULL, resource);
+      assert(fseek(file, 0, SEEK_END) == 0 && ftell(file) == (long)(24 + size));
+      assert((header[10] & 0xc0) == 0);
+      frames[sample - 1] = header[8] | ((uint32_t)header[9] << 8) | ((uint32_t)header[10] << 16);
+      for (unsigned int j = 0; j + 1 < sample; ++j) assert(frames[j] != frames[sample - 1]);
+      if (sample == 1) first_frame_high = header[10];
+    }
     fclose(file);
     assert(memcmp(header, "MWA2", 4) == 0);
-    assert(header[4] == algorithm && header[5] == info->block_size);
+    assert(header[4] == algorithm && header[5] == info->iv_size);
   }
   if (expire) {
     assert(lab_expire_samples(&lab, error, sizeof(error)));
@@ -80,9 +98,14 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
     change_header(path, 4, (unsigned char)algorithm);
     change_header(path, 5, 0);
     assert(!lab_restore_samples(&lab, error, sizeof(error)));
-    change_header(path, 5, (unsigned char)info->block_size);
+    change_header(path, 5, (unsigned char)info->iv_size);
+    if (algorithm == CRYPTO_A51) {
+      change_header(path, 10, first_frame_high | 0x80);
+      assert(!lab_restore_samples(&lab, error, sizeof(error)));
+      change_header(path, 10, first_frame_high);
+    }
     assert(lab_restore_samples(&lab, error, sizeof(error)));
-    check_samples(&lab);
+    if (!empty) check_samples(&lab);
     assert(!lab_encrypt_samples(&lab, algorithm, error, sizeof(error)));
   }
   for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
@@ -90,6 +113,11 @@ static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
     assert(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
     if (!expire) {
       sample_path(path, &lab, sample, false);
+      if (empty) {
+        file = fopen(path, "rb");
+        assert(file && fgetc(file) == EOF && !ferror(file));
+        fclose(file);
+      }
       assert(DeleteFileA(path));
     }
   }
@@ -137,16 +165,40 @@ static void check_portable_dispatch(void) {
   }
 }
 
+static void check_stream_dispatch(void) {
+  const unsigned char key[8] = { 0xef,0xcd,0xab,0x89,0x67,0x45,0x23,0x01 };
+  const unsigned char expected[14] = { 0xcb,0xa2,0x55,0x76,0x17,0x5d,0x3b,0x1c,0x7b,0x2f,0x29,0xa8,0xc1,0xb6 };
+  unsigned char iv[16] = { 0 }, plain[14] = { 0 }, cipher[14], restored[14];
+  uint32_t frame = ((123456U / 1326) << 11) | ((123456U % 51) << 5) | (123456U % 26);
+  CryptoContext context;
+  ULONG size;
+  assert(crypto_init(&context, CRYPTO_A51));
+  memcpy(context.portable_key, key, sizeof(key));
+  for (unsigned int i = 0; i < A51_IV_SIZE; ++i) iv[i] = (unsigned char)(frame >> (8 * i));
+  assert(crypto_encrypt(&context, iv, plain, sizeof(plain), cipher, sizeof(cipher), &size));
+  assert(size == sizeof(plain) && !memcmp(cipher, expected, size));
+  assert(crypto_decrypt(&context, iv, cipher, size, restored, sizeof(restored), &size));
+  assert(size == sizeof(plain) && !memcmp(restored, plain, size));
+  assert(crypto_encrypt(&context, iv, NULL, 0, cipher, 0, &size) && size == 0);
+  assert(crypto_decrypt(&context, iv, cipher, 0, restored, 0, &size) && size == 0);
+  iv[2] |= 0x80;
+  assert(!crypto_decrypt(&context, iv, cipher, 1, restored, sizeof(restored), &size) && size == 0);
+  crypto_close(&context);
+  for (size_t i = 0; i < sizeof(context.portable_key); ++i) assert(context.portable_key[i] == 0);
+}
+
 int main(void) {
   size_t index;
   check_portable_dispatch();
+  check_stream_dispatch();
   assert(crypto_algorithm_info((CryptoAlgorithm)99) == NULL);
   assert(crypto_algorithm_at(crypto_algorithm_count()) == NULL);
   for (index = 0; index < crypto_algorithm_count(); ++index) {
     const CryptoInfo *info = crypto_algorithm_at(index);
-    check_algorithm(info->id, false);
-    check_algorithm(info->id, true);
+    check_algorithm(info->id, false, false);
+    check_algorithm(info->id, true, false);
     printf("%s: sample restoration, metadata checks, and expiry passed.\n", info->name);
   }
+  check_algorithm(CRYPTO_A51, false, true);
   return 0;
 }
