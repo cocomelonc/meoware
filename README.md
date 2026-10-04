@@ -40,8 +40,10 @@ The algorithm catalog in `src/crypto.c` supplies the GUI names, IDs, and sizes. 
 From this directory:    
 
 ```bash
-make
+make all
 ```
+
+![img](./screenshots/4.png)    
 
 Or invoke the compiler directly:    
 
