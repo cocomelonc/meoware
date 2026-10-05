@@ -73,17 +73,17 @@ The build does not require Visual Studio or MFC. The sample assets are packed in
 
 The payment flow is a Telegram-mediated demo, not a local confirmation counter. Python is not required: the Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.
 
-1. Click `Run demo`, then `Simulate transfer`. The GUI sends a cat-image payment request for 25 fictional meowcoins to the configured Telegram chat.     
+Click `Run demo`, then `Simulate transfer`. The GUI sends a cat-image payment request for 25 fictional meowcoins to the configured Telegram chat.       
 
 ![img](./screenshots/5.png)    
 
 ![img](./screenshots/6.png)    
 
-2. In that chat, press `Payment: OK - send receipt` on the request. The GUI polls for the callback and checks that it matches the configured chat and current session.    
+In that chat, press `Payment: OK - send receipt` on the request. The GUI polls for the callback and checks that it matches the configured chat and current session.    
 
 ![img](./screenshots/9.png)    
 
-3. After approval, the bot sends a demo receipt to the chat and the GUI displays it and restores the five generated samples. `Check receipt` shows the current status; `Retry transfer` is available after a network error, and each retry uses a new session reference.
+After approval, the bot sends a demo receipt to the chat and the GUI displays it and restores the five generated samples. `Check receipt` shows the current status; `Retry transfer` is available after a network error, and each retry uses a new session reference.    
 
 ![img](./screenshots/7.png)    
 
