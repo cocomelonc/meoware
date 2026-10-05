@@ -1,12 +1,16 @@
 # Meoware EDU
 
+<p align="center">
+  <img src="./screenshots/meoware-kitten.png" alt="Meoware kitten" width="180" />
+</p>
+
 This PoC based on [malware and cryptography series](https://cocomelonc.github.io/malware/2026/03/05/malware-cryptography-44.html) from my [blog](https://cocomelonc.github.io/)    
 
 Meoware EDU is a standalone C/Win32 ransomware simulation PoC for different cryptographic algorithms. The GUI creates a unique temporary folder with five bundled sample files, encrypts those files with the selected algorithm (AES, TEA, or XTEA), shows a 24-hour countdown, and restores the samples while the session key is in memory. If the countdown expires, the deadline branch removes only the five encrypted sample outputs from that lab.
 
 ![img](./screenshots/1.png)    
 
-The lab directory is created under the current user's Windows temporary directory. The application does not accept arbitrary target paths or enumerate drives. It makes no network requests, does not register file associations, and does not touch the registry. The payment scenario uses fictional meowcoins and an in-memory receipt; no real payment is requested or verified.
+The lab directory is created under the current user's Windows temporary directory. The application does not accept arbitrary target paths or enumerate drives, register file associations, or touch the registry. Its payment demo uses the Telegram Bot API to exchange a fictional meowcoins request and operator-approved demo receipt; no real payment is requested or verified.
 
 The sample text assets are embedded into the executable at build time. The C implementation separates the Win32 UI, lab workflow, cipher dispatch, and portable TEA, XTEA, CBC, and receipt modules. AES and random key/IV generation use Windows CNG.      
 
