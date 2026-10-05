@@ -13,6 +13,7 @@
 #include "a51.h"
 #include "skipjack.h"
 #include "camellia.h"
+#include "speck.h"
 
 #define CRYPTO_MAX_BLOCK_SIZE 16U
 
@@ -24,7 +25,8 @@ typedef enum {
     CRYPTO_RC6128_CBC = 5,
     CRYPTO_A51 = 6,
     CRYPTO_SKIPJACK80_CBC = 7,
-    CRYPTO_CAMELLIA128_CBC = 8
+    CRYPTO_CAMELLIA128_CBC = 8,
+    CRYPTO_SPECK128_CBC = 9
 } CryptoAlgorithm;
 
 typedef struct {

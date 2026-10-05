@@ -19,15 +19,16 @@ Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is t
 | GUI option | Key | Block / IV | Implementation |
 | --- | --- | --- | --- |
 | AES-256-CBC | 256 bits | 128 bits | Windows CNG |
-| TEA-128-CBC | 128 bits | 64 bits | Classic TEA, 32 cycles (64 half-rounds), explicit big-endian words |
-| XTEA-128-CBC | 128 bits | 64 bits | Extended TEA, 32 cycles (64 half-rounds), explicit big-endian words |
-| RC5-128-CBC | 128 bits | 64 bits | RC5-32/12/16, 12 rounds, explicit little-endian words |
-| RC6-128-CBC | 128 bits | 128 bits | RC6-32/20/16, 20 rounds, explicit little-endian words |
+| TEA-128-CBC | 128 bits | 64 bits | Classic TEA, 32 cycles (64 half-rounds), explicit big-endian words: based on [blog](https://cocomelonc.github.io/malware/2023/02/20/malware-av-evasion-12.html) |
+| XTEA-128-CBC | 128 bits | 64 bits | Extended TEA, 32 cycles (64 half-rounds), explicit big-endian words: based on [blog](https://cocomelonc.github.io/malware/2023/11/23/malware-cryptography-22.html) |
+| RC5-128-CBC | 128 bits | 64 bits | RC5-32/12/16, 12 rounds, explicit little-endian words: [blog](https://cocomelonc.github.io/malware/2023/08/13/malware-cryptography-1.html)|
+| RC6-128-CBC | 128 bits | 128 bits | RC6-32/20/16, 20 rounds, explicit little-endian words: [blog](https://cocomelonc.github.io/malware/2024/02/21/malware-cryptography-25.html) |
 | A5/1 | 64 bits | Stream / 22-bit COUNT in 3 bytes | Majority-clocked 19/22/23-bit LFSRs; continuous file keystream, no GSM burst framing or padding; educational only ([blog #27](https://cocomelonc.github.io/malware/2024/05/12/malware-cryptography-27.html)) |
 | Skipjack-80-CBC | 80 bits | 64 bits | 32 rounds, alternating A/B rules, big-endian words ([blog #20](https://cocomelonc.github.io/malware/2023/08/28/malware-cryptography-20.html)) |
 | Camellia-128-CBC | 128 bits | 128 bits | 18 rounds, FL/FLINV layers, big-endian words; RFC 3713 ([blog #38](https://cocomelonc.github.io/malware/2024/12/29/malware-cryptography-38.html)) |
+| Speck-128-CBC | 128 bits | 128 bits | Speck128/128, 32 rounds, ARX operations, reference little-endian byte/word order ([blog #42](https://cocomelonc.github.io/malware/2025/05/29/malware-cryptography-42.html)) |
 
-All three modes use `PKCS#7` padding, a fresh random session key, and a fresh IV per sample. TEA and XTEA have separate block implementations and share CBC/padding handling in `src/cbc64.c`. This is a teaching lab: the CBC records do not provide authenticated encryption.      
+All block cipher modes use `PKCS#7` padding, a fresh random session key, and a fresh IV per sample. TEA and XTEA have separate block implementations and share CBC/padding handling in `src/cbc64.c`. This is a teaching lab: the CBC records do not provide authenticated encryption.      
 
 For TEA: the algorithm selection follows the cryptography series in [my blog](https://cocomelonc.github.io/malware/2023/02/20/malware-av-evasion-12.html). The C snippet in that article uses XTEA-style mixing despite its TEA function names. This implementation follows [Wheeler and Needham's original TEA specification](https://www.cl.cam.ac.uk/ftp/papers/djw-rmn/djw-rmn-tea.html), with known-answer tests from [Crypto++'s TEA vectors](https://github.com/weidai11/cryptopp/blob/master/TestVectors/tea.txt). Other algorithms will be added separately.     
 
