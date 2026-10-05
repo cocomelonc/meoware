@@ -67,13 +67,13 @@ The build does not require Visual Studio or MFC. The sample assets are packed in
 
 ## Payment simulation
 
-1. Click `Run demo` to start the lab and open a fictional receipt for 25 meowcoins.
-2. Click `Simulate transfer`. The receipt progresses through three local confirmations, one every two seconds.
-3. Click `Check receipt` after `3/3` confirmations to restore the five samples. Checking earlier explains whether the transfer is missing or still pending.
+The payment flow is a Telegram-mediated demo, not a local confirmation counter. Python is not required: the Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.
 
-`Show activity` switches the right-hand card to the session log; `Payment demo` switches back. `Restore samples` remains available throughout the active lab, independently of the mock receipt. Restoration, expiry, or an operation error closes the receipt and disables further transfers. Duplicate submissions do not add meowcoins or restart confirmation progress.
+1. Click `Run demo`, then `Simulate transfer`. The GUI sends a cat-image payment request for 25 fictional meowcoins to the configured Telegram chat.
+2. In that chat, press `Payment: OK - send receipt` on the request. The GUI polls for the callback and checks that it matches the configured chat and current session.
+3. After approval, the bot sends a demo receipt to the chat and the GUI displays it and restores the five generated samples. `Check receipt` shows the current status; `Retry transfer` is available after a network error, and each retry uses a new session reference.
 
-The displayed `demo://meoware/local-session` destination is a fictional label, not a wallet or a link. Receipts exist only for the current process. The payment module is an original C implementation with its own state model, UI text, and identifiers; it does not import the reference project's payment or wallet code.
+The GUI is the only update consumer for this bot token: stop other polling clients and do not configure a webhook for it. An existing webhook or competing poller prevents the approval flow from working. No real money, wallet, or blockchain is involved; the amount and receipt are fictional. The request sends only the demo amount, a random session reference, and fixed demo text, not encryption keys, sample contents, paths, or machine information. `Restore samples` remains available for local recovery regardless of Telegram status.
 
 Run the portable receipt, TEA, and XTEA tests with a host C compiler (no Windows or Wine needed). These cover published cipher vectors, CBC chaining, padding rejection, buffer boundaries, in-place operations, and exact restoration of the five bundled samples:
 
