@@ -71,7 +71,9 @@ The build does not require Visual Studio or MFC. The sample assets are packed in
 
 ## Payment simulation
 
-The payment flow is a Telegram-mediated demo, not a local confirmation counter. Python is not required: the Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.
+The payment flow is a Telegram-mediated demo, not a local confirmation counter. The Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.    
+
+![img](./screenshots/8.png)    
 
 Click `Run demo`, then `Simulate transfer`. The GUI sends a cat-image payment request for 25 fictional meowcoins to the configured Telegram chat.       
 
