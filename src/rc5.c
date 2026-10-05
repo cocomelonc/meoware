@@ -6,8 +6,8 @@
 #define RC5_SUBKEYS (2U * (RC5_ROUNDS + 1U))
 
 static uint32_t read_word(const uint8_t *bytes) {
-  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
-         ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) |
+         ((uint32_t)bytes[3] << 24);
 }
 
 static void write_word(uint8_t *bytes, uint32_t word) {
@@ -77,11 +77,15 @@ void rc5_decrypt_block(uint8_t block[RC5_BLOCK_SIZE], const uint8_t key[RC5_KEY_
 }
 
 bool rc5_cbc_encrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_encrypt(rc5_encrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written) {
+  return cbc_encrypt(rc5_encrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity,
+                     written);
 }
 
 bool rc5_cbc_decrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_decrypt(rc5_decrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written) {
+  return cbc_decrypt(rc5_decrypt_block, RC5_BLOCK_SIZE, key, iv, input, length, output, capacity,
+                     written);
 }

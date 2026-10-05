@@ -13,8 +13,10 @@
 void rc6_encrypt_block(uint8_t block[RC6_BLOCK_SIZE], const uint8_t key[RC6_KEY_SIZE]);
 void rc6_decrypt_block(uint8_t block[RC6_BLOCK_SIZE], const uint8_t key[RC6_KEY_SIZE]);
 bool rc6_cbc_encrypt(const uint8_t key[RC6_KEY_SIZE], const uint8_t iv[RC6_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written);
 bool rc6_cbc_decrypt(const uint8_t key[RC6_KEY_SIZE], const uint8_t iv[RC6_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written);
 
 #endif

@@ -16,9 +16,10 @@ static void decode_hex(const char *text, uint8_t *bytes) {
 static void known_answers(void) {
   /* RC6-32/20/16 vectors: https://github.com/weidai11/cryptopp/blob/master/TestData/rc6val.dat */
   const char *vectors[][3] = {
-    { "00000000000000000000000000000000", "00000000000000000000000000000000", "8fc3a53656b1f778c129df4e9848a41e" },
-    { "0123456789abcdef0112233445566778", "02132435465768798a9bacbdcedfe0f1", "524e192f4715c6231f51f6367ea43f18" }
-  };
+      {"00000000000000000000000000000000", "00000000000000000000000000000000",
+       "8fc3a53656b1f778c129df4e9848a41e"},
+      {"0123456789abcdef0112233445566778", "02132435465768798a9bacbdcedfe0f1",
+       "524e192f4715c6231f51f6367ea43f18"}};
   for (size_t i = 0; i < sizeof(vectors) / sizeof(vectors[0]); ++i) {
     uint8_t key[16], plain[16], expected[16], block[16];
     decode_hex(vectors[i][0], key);
@@ -31,7 +32,7 @@ static void known_answers(void) {
     assert(memcmp(block, plain, sizeof(block)) == 0);
   }
   /* With IV=0, P1=0 and P2=E(0), the first two CBC blocks both equal E(0). */
-  uint8_t key[16] = { 0 }, iv[16] = { 0 }, input[32] = { 0 }, cipher[48];
+  uint8_t key[16] = {0}, iv[16] = {0}, input[32] = {0}, cipher[48];
   size_t written;
   decode_hex(vectors[0][2], input + 16);
   assert(rc6_cbc_encrypt(key, iv, input, sizeof(input), cipher, sizeof(cipher), &written));
@@ -40,7 +41,7 @@ static void known_answers(void) {
 }
 
 static void round_trip(const uint8_t *plain, size_t length) {
-  uint8_t key[16] = { 1, 2, 3 }, iv[16] = { 4, 5, 6 };
+  uint8_t key[16] = {1, 2, 3}, iv[16] = {4, 5, 6};
   uint8_t cipher[32784], restored[32784];
   size_t encrypted, decrypted, in_place;
   assert(rc6_cbc_encrypt(key, iv, plain, length, cipher, sizeof(cipher), &encrypted));
@@ -57,13 +58,15 @@ static void round_trip(const uint8_t *plain, size_t length) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[16] = { 0 }, iv[16] = { 0 }, block[16], output[32];
+  uint8_t key[16] = {0}, iv[16] = {0}, block[16], output[32];
   size_t written;
-  const size_t invalid_sizes[] = { 0, 7, 17, SIZE_MAX };
+  const size_t invalid_sizes[] = {0, 7, 17, SIZE_MAX};
   for (size_t i = 0; i < sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); ++i) {
-    assert(!cbc_encrypt(rc6_encrypt_block, invalid_sizes[i], key, iv, NULL, 0, output, sizeof(output), &written));
+    assert(!cbc_encrypt(rc6_encrypt_block, invalid_sizes[i], key, iv, NULL, 0, output,
+                        sizeof(output), &written));
     assert(written == 0);
-    assert(!cbc_decrypt(rc6_decrypt_block, invalid_sizes[i], key, iv, output, 16, output, sizeof(output), &written));
+    assert(!cbc_decrypt(rc6_decrypt_block, invalid_sizes[i], key, iv, output, 16, output,
+                        sizeof(output), &written));
     assert(written == 0);
   }
   assert(!rc6_cbc_encrypt(key, iv, NULL, 1, output, sizeof(output), &written));

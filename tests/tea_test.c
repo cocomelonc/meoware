@@ -7,16 +7,13 @@
 static void known_answers(void) {
   /* Published TEA vectors 1 and 5 (big endian):
    * https://github.com/weidai11/cryptopp/blob/master/TestVectors/tea.txt */
-  const uint8_t keys[2][16] = {
-    { 0 },
-    { 0x41,0xea,0x3a,0x0a,0x4e,0x8e,0x78,0x29,0xc8,0x8b,0xa9,0x5e,0xb8,0x4e,0x28,0xaf }
-  };
-  const uint8_t plain[2][8] = { { 0 }, { 0xb6,0xb6,0x20,0x88,0,0,0,0 } };
-  const uint8_t expected[2][8] = {
-    { 0x41,0xea,0x3a,0x0a,0x94,0xba,0xa9,0x40 },
-    { 0xa0,0xa4,0x72,0x95,0x8f,0xad,0xf3,0xb3 }
-  };
-  uint8_t block[8], input[16] = { 0 }, cipher[24], iv[8] = { 0 };
+  const uint8_t keys[2][16] = {{0},
+                               {0x41, 0xea, 0x3a, 0x0a, 0x4e, 0x8e, 0x78, 0x29, 0xc8, 0x8b, 0xa9,
+                                0x5e, 0xb8, 0x4e, 0x28, 0xaf}};
+  const uint8_t plain[2][8] = {{0}, {0xb6, 0xb6, 0x20, 0x88, 0, 0, 0, 0}};
+  const uint8_t expected[2][8] = {{0x41, 0xea, 0x3a, 0x0a, 0x94, 0xba, 0xa9, 0x40},
+                                  {0xa0, 0xa4, 0x72, 0x95, 0x8f, 0xad, 0xf3, 0xb3}};
+  uint8_t block[8], input[16] = {0}, cipher[24], iv[8] = {0};
   size_t written;
   unsigned int i;
   for (i = 0; i < 2; ++i) {
@@ -58,7 +55,7 @@ static void round_trips(void) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[16] = { 0 }, iv[8] = { 0 }, cipher[16], output[16];
+  uint8_t key[16] = {0}, iv[8] = {0}, cipher[16], output[16];
   uint8_t bad_padding[8];
   size_t written, index;
   unsigned int padding;
@@ -83,7 +80,7 @@ static void invalid_inputs(void) {
 
 static void bundled_samples(void) {
   uint8_t plain[32768], cipher[32776], restored[32776];
-  uint8_t key[16] = { 1, 2, 3 }, iv[8] = { 4, 5, 6 };
+  uint8_t key[16] = {1, 2, 3}, iv[8] = {4, 5, 6};
   unsigned int sample;
   for (sample = 1; sample <= 5; ++sample) {
     char path[64];

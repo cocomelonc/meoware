@@ -7,17 +7,14 @@
 static void known_answer(void) {
   /* Implementation Guide 1.1, section 16, byte-oriented Speck128/128 vector:
    * https://nsacyber.github.io/simon-speck/implementations/ImplementationGuide1.1.pdf */
-  const uint8_t key[16] = {
-    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
-  };
-  const uint8_t plain[16] = {
-    0x20,0x6d,0x61,0x64,0x65,0x20,0x69,0x74,0x20,0x65,0x71,0x75,0x69,0x76,0x61,0x6c
-  };
-  const uint8_t expected[16] = {
-    0x18,0x0d,0x57,0x5c,0xdf,0xfe,0x60,0x78,0x65,0x32,0x78,0x79,0x51,0x98,0x5d,0xa6
-  };
+  const uint8_t key[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+                           0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
+  const uint8_t plain[16] = {0x20, 0x6d, 0x61, 0x64, 0x65, 0x20, 0x69, 0x74,
+                             0x20, 0x65, 0x71, 0x75, 0x69, 0x76, 0x61, 0x6c};
+  const uint8_t expected[16] = {0x18, 0x0d, 0x57, 0x5c, 0xdf, 0xfe, 0x60, 0x78,
+                                0x65, 0x32, 0x78, 0x79, 0x51, 0x98, 0x5d, 0xa6};
   /* Deliberately unaligned inputs; guard bytes also catch block over-writes. */
-  uint8_t block[18] = { 0xa5 }, unaligned_key[17];
+  uint8_t block[18] = {0xa5}, unaligned_key[17];
   block[17] = 0x5a;
   memcpy(block + 1, plain, 16);
   memcpy(unaligned_key + 1, key, 16);
@@ -29,7 +26,7 @@ static void known_answer(void) {
   assert(memcmp(unaligned_key + 1, key, 16) == 0);
 
   /* IV=P, P1=0 and P2=C xor P make the first two CBC blocks equal C. */
-  uint8_t input[32] = { 0 }, cipher[48], restored[48];
+  uint8_t input[32] = {0}, cipher[48], restored[48];
   size_t written;
   for (size_t i = 0; i < 16; ++i) input[16 + i] = expected[i] ^ plain[i];
   assert(speck_cbc_encrypt(key, plain, input, sizeof(input), cipher, sizeof(cipher), &written));
@@ -63,7 +60,7 @@ static void round_trip(const uint8_t *plain, size_t length) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[16] = { 0 }, iv[16] = { 0 }, block[16], output[32];
+  uint8_t key[16] = {0}, iv[16] = {0}, block[16], output[32];
   size_t written = 99;
   assert(!speck_cbc_encrypt(key, iv, NULL, 1, output, sizeof(output), &written));
   assert(written == 0);

@@ -15,9 +15,9 @@ static void decode_hex(const char *text, uint8_t *bytes) {
 
 static void known_answers(void) {
   /* RFC 3713 Appendix A: 128-bit key example. */
-  const char *vectors[][3] = {
-    { "0123456789abcdeffedcba9876543210", "0123456789abcdeffedcba9876543210", "67673138549669730857065648eabe43" }
-  };
+  const char *vectors[][3] = {{"0123456789abcdeffedcba9876543210",
+                               "0123456789abcdeffedcba9876543210",
+                               "67673138549669730857065648eabe43"}};
   for (size_t i = 0; i < sizeof(vectors) / sizeof(vectors[0]); ++i) {
     uint8_t key[16], plain[16], expected[16], block[16];
     decode_hex(vectors[i][0], key);
@@ -30,7 +30,7 @@ static void known_answers(void) {
     assert(memcmp(block, plain, sizeof(block)) == 0);
   }
   /* IV=P from the vector, P1=0, P2=C xor P: both CBC blocks equal C. */
-  uint8_t key[16], iv[16], expected[16], input[32] = { 0 }, cipher[48];
+  uint8_t key[16], iv[16], expected[16], input[32] = {0}, cipher[48];
   size_t written;
   decode_hex(vectors[0][0], key);
   decode_hex(vectors[0][1], iv);
@@ -42,7 +42,7 @@ static void known_answers(void) {
 }
 
 static void round_trip(const uint8_t *plain, size_t length) {
-  uint8_t key[16] = { 1, 2, 3 }, iv[16] = { 4, 5, 6 };
+  uint8_t key[16] = {1, 2, 3}, iv[16] = {4, 5, 6};
   uint8_t cipher[32784], restored[32784];
   size_t encrypted, decrypted, in_place;
   assert(camellia_cbc_encrypt(key, iv, plain, length, cipher, sizeof(cipher), &encrypted));
@@ -51,7 +51,8 @@ static void round_trip(const uint8_t *plain, size_t length) {
   assert(decrypted == length && memcmp(plain, restored, length) == 0);
   assert(camellia_cbc_encrypt(key, iv, restored, length, restored, sizeof(restored), &in_place));
   assert(in_place == encrypted && memcmp(cipher, restored, encrypted) == 0);
-  assert(camellia_cbc_decrypt(key, iv, restored, encrypted, restored, sizeof(restored), &decrypted));
+  assert(
+      camellia_cbc_decrypt(key, iv, restored, encrypted, restored, sizeof(restored), &decrypted));
   assert(decrypted == length && memcmp(plain, restored, length) == 0);
   iv[0] ^= 1;
   assert(camellia_cbc_encrypt(key, iv, plain, length, restored, sizeof(restored), &in_place));
@@ -59,13 +60,15 @@ static void round_trip(const uint8_t *plain, size_t length) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[16] = { 0 }, iv[16] = { 0 }, block[16], output[32];
+  uint8_t key[16] = {0}, iv[16] = {0}, block[16], output[32];
   size_t written;
-  const size_t invalid_sizes[] = { 0, 7, 17, SIZE_MAX };
+  const size_t invalid_sizes[] = {0, 7, 17, SIZE_MAX};
   for (size_t i = 0; i < sizeof(invalid_sizes) / sizeof(invalid_sizes[0]); ++i) {
-    assert(!cbc_encrypt(camellia_encrypt_block, invalid_sizes[i], key, iv, NULL, 0, output, sizeof(output), &written));
+    assert(!cbc_encrypt(camellia_encrypt_block, invalid_sizes[i], key, iv, NULL, 0, output,
+                        sizeof(output), &written));
     assert(written == 0);
-    assert(!cbc_decrypt(camellia_decrypt_block, invalid_sizes[i], key, iv, output, 16, output, sizeof(output), &written));
+    assert(!cbc_decrypt(camellia_decrypt_block, invalid_sizes[i], key, iv, output, 16, output,
+                        sizeof(output), &written));
     assert(written == 0);
   }
   assert(!camellia_cbc_encrypt(key, iv, NULL, 1, output, sizeof(output), &written));

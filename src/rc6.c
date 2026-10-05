@@ -6,8 +6,8 @@
 #define RC6_SUBKEYS (2U * RC6_ROUNDS + 4U)
 
 static uint32_t read_word(const uint8_t *bytes) {
-  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
-         ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+  return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) |
+         ((uint32_t)bytes[3] << 24);
 }
 
 static void write_word(uint8_t *bytes, uint32_t word) {
@@ -54,7 +54,10 @@ static void transform_block(uint8_t *block, const uint8_t *key, bool reverse) {
     a -= subkeys[2 * RC6_ROUNDS + 2];
     for (unsigned int round = RC6_ROUNDS; round > 0; --round) {
       uint32_t saved = d;
-      d = c; c = b; b = a; a = saved;
+      d = c;
+      c = b;
+      b = a;
+      a = saved;
       uint32_t u = rotate_left(d * (2 * d + 1), 5);
       uint32_t t = rotate_left(b * (2 * b + 1), 5);
       c = rotate_right(c - subkeys[2 * round + 1], t) ^ u;
@@ -71,7 +74,10 @@ static void transform_block(uint8_t *block, const uint8_t *key, bool reverse) {
       a = rotate_left(a ^ t, u) + subkeys[2 * round];
       c = rotate_left(c ^ u, t) + subkeys[2 * round + 1];
       uint32_t saved = a;
-      a = b; b = c; c = d; d = saved;
+      a = b;
+      b = c;
+      c = d;
+      d = saved;
     }
     a += subkeys[2 * RC6_ROUNDS + 2];
     c += subkeys[2 * RC6_ROUNDS + 3];
@@ -92,11 +98,15 @@ void rc6_decrypt_block(uint8_t block[RC6_BLOCK_SIZE], const uint8_t key[RC6_KEY_
 }
 
 bool rc6_cbc_encrypt(const uint8_t key[RC6_KEY_SIZE], const uint8_t iv[RC6_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_encrypt(rc6_encrypt_block, RC6_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written) {
+  return cbc_encrypt(rc6_encrypt_block, RC6_BLOCK_SIZE, key, iv, input, length, output, capacity,
+                     written);
 }
 
 bool rc6_cbc_decrypt(const uint8_t key[RC6_KEY_SIZE], const uint8_t iv[RC6_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_decrypt(rc6_decrypt_block, RC6_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written) {
+  return cbc_decrypt(rc6_decrypt_block, RC6_BLOCK_SIZE, key, iv, input, length, output, capacity,
+                     written);
 }

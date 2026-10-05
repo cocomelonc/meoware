@@ -21,12 +21,13 @@ static void clock_registers(uint32_t state[3], bool all) {
   }
 }
 
-bool a51_crypt(const uint8_t key[A51_KEY_SIZE], uint32_t frame,
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  uint32_t state[3] = { 0 };
+bool a51_crypt(const uint8_t key[A51_KEY_SIZE], uint32_t frame, const uint8_t *input, size_t length,
+               uint8_t *output, size_t capacity, size_t *written) {
+  uint32_t state[3] = {0};
   if (!written) return false;
   *written = 0;
-  if (!key || frame > A51_FRAME_MASK || (!input && length) || !output || capacity < length) return false;
+  if (!key || frame > A51_FRAME_MASK || (!input && length) || !output || capacity < length)
+    return false;
   for (unsigned int bit = 0; bit < 86; ++bit) {
     unsigned int incoming = bit < 64 ? (key[bit / 8] >> (bit % 8)) & 1 : (frame >> (bit - 64)) & 1;
     clock_registers(state, true);

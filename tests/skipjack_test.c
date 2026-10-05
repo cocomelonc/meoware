@@ -25,7 +25,7 @@ static void known_answers(void) {
   assert(memcmp(block, plain, sizeof(block)) == 0);
 
   /* P2 = P1 XOR C1 gives C2 = C1 with IV=0. */
-  uint8_t iv[8] = { 0 }, input[16], cipher[24];
+  uint8_t iv[8] = {0}, input[16], cipher[24];
   size_t written;
   memcpy(input, plain, 8);
   for (unsigned int i = 0; i < 8; ++i) input[8 + i] = plain[i] ^ expected[i];
@@ -46,7 +46,7 @@ static void known_answers(void) {
 }
 
 static void round_trip(const uint8_t *plain, size_t length) {
-  uint8_t key[SKIPJACK_KEY_SIZE] = { 1, 2, 3 }, iv[8] = { 4, 5, 6 };
+  uint8_t key[SKIPJACK_KEY_SIZE] = {1, 2, 3}, iv[8] = {4, 5, 6};
   uint8_t cipher[32776], restored[32776];
   size_t encrypted, decrypted, in_place;
   assert(skipjack_cbc_encrypt(key, iv, plain, length, cipher, sizeof(cipher), &encrypted));
@@ -55,7 +55,8 @@ static void round_trip(const uint8_t *plain, size_t length) {
   assert(decrypted == length && memcmp(plain, restored, length) == 0);
   assert(skipjack_cbc_encrypt(key, iv, restored, length, restored, sizeof(restored), &in_place));
   assert(in_place == encrypted && memcmp(cipher, restored, encrypted) == 0);
-  assert(skipjack_cbc_decrypt(key, iv, restored, encrypted, restored, sizeof(restored), &decrypted));
+  assert(
+      skipjack_cbc_decrypt(key, iv, restored, encrypted, restored, sizeof(restored), &decrypted));
   assert(decrypted == length && memcmp(plain, restored, length) == 0);
   iv[0] ^= 1;
   assert(skipjack_cbc_encrypt(key, iv, plain, length, restored, sizeof(restored), &in_place));
@@ -63,7 +64,7 @@ static void round_trip(const uint8_t *plain, size_t length) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[SKIPJACK_KEY_SIZE] = { 0 }, iv[8] = { 0 }, block[8], output[16];
+  uint8_t key[SKIPJACK_KEY_SIZE] = {0}, iv[8] = {0}, block[8], output[16];
   size_t written;
   assert(!skipjack_cbc_encrypt(key, iv, NULL, 1, output, sizeof(output), &written));
   assert(!skipjack_cbc_encrypt(key, iv, output, SIZE_MAX, output, SIZE_MAX, &written));

@@ -5,7 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct { const char *text; size_t size; } Json;
+typedef struct {
+  const char *text;
+  size_t size;
+} Json;
 bool json_parse(const char *text, size_t size, Json *value);
 Json json_get(Json object, const char *key);
 Json json_at(Json array, size_t index);

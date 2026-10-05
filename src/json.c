@@ -17,15 +17,19 @@ static bool string(const char **cursor, const char *end) {
       c = (unsigned char)*(*cursor)++;
       if (c == 'u') {
         for (int i = 0; i < 4; ++i) {
-          if (*cursor == end || **cursor == 0 || !strchr("0123456789abcdefABCDEF", *(*cursor)++)) return false;
+          if (*cursor == end || **cursor == 0 || !strchr("0123456789abcdefABCDEF", *(*cursor)++))
+            return false;
         }
-      } else if (c == 0 || !strchr("\"\\/bfnrt", c)) return false;
+      } else if (c == 0 || !strchr("\"\\/bfnrt", c))
+        return false;
     }
   }
   return false;
 }
 
-static bool digit(char c) { return c >= '0' && c <= '9'; }
+static bool digit(char c) {
+  return c >= '0' && c <= '9';
+}
 
 static bool value(const char **cursor, const char *end, unsigned int depth) {
   const char *p = *cursor;
@@ -35,7 +39,10 @@ static bool value(const char **cursor, const char *end, unsigned int depth) {
     bool object = *p++ == '{';
     char close = object ? '}' : ']';
     space(&p, end);
-    if (p < end && *p == close) { *cursor = p + 1; return true; }
+    if (p < end && *p == close) {
+      *cursor = p + 1;
+      return true;
+    }
     while (p < end) {
       if (object) {
         if (!string(&p, end)) return false;
@@ -46,22 +53,27 @@ static bool value(const char **cursor, const char *end, unsigned int depth) {
       if (!value(&p, end, depth + 1)) return false;
       space(&p, end);
       if (p == end) return false;
-      if (*p == close) { *cursor = p + 1; return true; }
+      if (*p == close) {
+        *cursor = p + 1;
+        return true;
+      }
       if (*p++ != ',') return false;
       space(&p, end);
     }
     return false;
   }
-  const char *words[] = { "true", "false", "null" };
+  const char *words[] = {"true", "false", "null"};
   for (size_t i = 0; i < 3; ++i) {
     size_t length = strlen(words[i]);
     if ((size_t)(end - p) >= length && !memcmp(p, words[i], length)) {
-      *cursor = p + length; return true;
+      *cursor = p + length;
+      return true;
     }
   }
   if (*p == '-') ++p;
   if (p == end || !digit(*p)) return false;
-  if (*p++ != '0') while (p < end && digit(*p)) ++p;
+  if (*p++ != '0')
+    while (p < end && digit(*p)) ++p;
   if (p < end && *p == '.') {
     if (++p == end || !digit(*p)) return false;
     while (p < end && digit(*p)) ++p;
@@ -78,10 +90,11 @@ static bool value(const char **cursor, const char *end, unsigned int depth) {
 
 bool json_parse(const char *text, size_t size, Json *output) {
   const char *p = text, *end = text + size, *start;
-  *output = (Json){ 0 };
-  space(&p, end); start = p;
+  *output = (Json){0};
+  space(&p, end);
+  start = p;
   if (!value(&p, end, 0)) return false;
-  Json parsed = { start, (size_t)(p - start) };
+  Json parsed = {start, (size_t)(p - start)};
   space(&p, end);
   if (p != end) return false;
   *output = parsed;
@@ -90,7 +103,7 @@ bool json_parse(const char *text, size_t size, Json *output) {
 
 /* Accessors operate only on values returned from a successful parse. */
 static Json child(Json parent, const char *key, size_t index) {
-  if (!parent.size || parent.text[0] != (key ? '{' : '[')) return (Json){ 0 };
+  if (!parent.size || parent.text[0] != (key ? '{' : '[')) return (Json){0};
   const char *p = parent.text + 1, *end = parent.text + parent.size - 1;
   for (size_t i = 0; p < end; ++i) {
     bool match = i == index;
@@ -100,19 +113,25 @@ static Json child(Json parent, const char *key, size_t index) {
       const char *start = p;
       if (!string(&p, end)) break;
       match = (size_t)(p - start) == strlen(key) + 2 && !memcmp(start + 1, key, strlen(key));
-      space(&p, end); ++p; space(&p, end);
+      space(&p, end);
+      ++p;
+      space(&p, end);
     }
     const char *start = p;
     if (!value(&p, end, 0)) break;
-    if (match) return (Json){ start, (size_t)(p - start) };
+    if (match) return (Json){start, (size_t)(p - start)};
     space(&p, end);
     if (p < end) ++p;
   }
-  return (Json){ 0 };
+  return (Json){0};
 }
 
-Json json_get(Json object, const char *key) { return child(object, key, 0); }
-Json json_at(Json array, size_t index) { return child(array, NULL, index); }
+Json json_get(Json object, const char *key) {
+  return child(object, key, 0);
+}
+Json json_at(Json array, size_t index) {
+  return child(array, NULL, index);
+}
 
 bool json_string(Json input, char *output, size_t capacity) {
   if (input.size < 2 || input.text[0] != '"' || !capacity) return false;
@@ -145,4 +164,6 @@ bool json_integer(Json input, int64_t *number) {
   return true;
 }
 
-bool json_true(Json input) { return input.size == 4 && !memcmp(input.text, "true", 4); }
+bool json_true(Json input) {
+  return input.size == 4 && !memcmp(input.text, "true", 4);
+}

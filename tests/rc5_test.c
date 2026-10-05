@@ -15,12 +15,11 @@ static void decode_hex(const char *text, uint8_t *bytes) {
 static void known_answers(void) {
   /* RC5-32/12/16 vectors: https://github.com/weidai11/cryptopp/blob/master/TestData/rc5val.dat */
   const char *vectors[][3] = {
-    { "00000000000000000000000000000000", "0000000000000000", "21a5dbee154b8f6d" },
-    { "915f4619be41b2516355a50110a9ce91", "21a5dbee154b8f6d", "f7c013ac5b2b8952" },
-    { "783348e75aeb0f2fd7b169bb8dc16787", "f7c013ac5b2b8952", "2f42b3b70369fc92" },
-    { "dc49db1375a5584f6485b413b5f12baf", "2f42b3b70369fc92", "65c178b284d197cc" },
-    { "5269f149d41ba0152497574d7f153125", "65c178b284d197cc", "eb44e415da319824" }
-  };
+      {"00000000000000000000000000000000", "0000000000000000", "21a5dbee154b8f6d"},
+      {"915f4619be41b2516355a50110a9ce91", "21a5dbee154b8f6d", "f7c013ac5b2b8952"},
+      {"783348e75aeb0f2fd7b169bb8dc16787", "f7c013ac5b2b8952", "2f42b3b70369fc92"},
+      {"dc49db1375a5584f6485b413b5f12baf", "2f42b3b70369fc92", "65c178b284d197cc"},
+      {"5269f149d41ba0152497574d7f153125", "65c178b284d197cc", "eb44e415da319824"}};
   for (size_t i = 0; i < sizeof(vectors) / sizeof(vectors[0]); ++i) {
     uint8_t key[16], plain[8], expected[8], block[8];
     decode_hex(vectors[i][0], key);
@@ -33,7 +32,7 @@ static void known_answers(void) {
     assert(memcmp(block, plain, sizeof(block)) == 0);
   }
   /* With IV=0, P1=0 and P2=E(0), the first two CBC blocks both equal E(0). */
-  uint8_t key[16] = { 0 }, iv[8] = { 0 }, input[16] = { 0 }, cipher[24];
+  uint8_t key[16] = {0}, iv[8] = {0}, input[16] = {0}, cipher[24];
   size_t written;
   decode_hex(vectors[0][2], input + 8);
   assert(rc5_cbc_encrypt(key, iv, input, sizeof(input), cipher, sizeof(cipher), &written));
@@ -42,7 +41,7 @@ static void known_answers(void) {
 }
 
 static void round_trip(const uint8_t *plain, size_t length) {
-  uint8_t key[16] = { 1, 2, 3 }, iv[8] = { 4, 5, 6 };
+  uint8_t key[16] = {1, 2, 3}, iv[8] = {4, 5, 6};
   uint8_t cipher[32776], restored[32776];
   size_t encrypted, decrypted, in_place;
   assert(rc5_cbc_encrypt(key, iv, plain, length, cipher, sizeof(cipher), &encrypted));
@@ -59,7 +58,7 @@ static void round_trip(const uint8_t *plain, size_t length) {
 }
 
 static void invalid_inputs(void) {
-  uint8_t key[16] = { 0 }, iv[8] = { 0 }, block[8], output[16];
+  uint8_t key[16] = {0}, iv[8] = {0}, block[8], output[16];
   size_t written;
   assert(!rc5_cbc_encrypt(key, iv, NULL, 1, output, sizeof(output), &written));
   assert(!rc5_cbc_encrypt(key, iv, output, SIZE_MAX, output, SIZE_MAX, &written));

@@ -13,8 +13,10 @@
 void rc5_encrypt_block(uint8_t block[RC5_BLOCK_SIZE], const uint8_t key[RC5_KEY_SIZE]);
 void rc5_decrypt_block(uint8_t block[RC5_BLOCK_SIZE], const uint8_t key[RC5_KEY_SIZE]);
 bool rc5_cbc_encrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written);
 bool rc5_cbc_decrypt(const uint8_t key[RC5_KEY_SIZE], const uint8_t iv[RC5_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                     const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                     size_t *written);
 
 #endif

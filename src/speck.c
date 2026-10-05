@@ -60,11 +60,15 @@ void speck_decrypt_block(uint8_t block[SPECK_BLOCK_SIZE], const uint8_t key[SPEC
 }
 
 bool speck_cbc_encrypt(const uint8_t key[SPECK_KEY_SIZE], const uint8_t iv[SPECK_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_encrypt(speck_encrypt_block, SPECK_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                       const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                       size_t *written) {
+  return cbc_encrypt(speck_encrypt_block, SPECK_BLOCK_SIZE, key, iv, input, length, output,
+                     capacity, written);
 }
 
 bool speck_cbc_decrypt(const uint8_t key[SPECK_KEY_SIZE], const uint8_t iv[SPECK_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written) {
-  return cbc_decrypt(speck_decrypt_block, SPECK_BLOCK_SIZE, key, iv, input, length, output, capacity, written);
+                       const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                       size_t *written) {
+  return cbc_decrypt(speck_decrypt_block, SPECK_BLOCK_SIZE, key, iv, input, length, output,
+                     capacity, written);
 }

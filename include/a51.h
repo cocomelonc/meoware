@@ -13,7 +13,7 @@
  * File adaptation: continuous MSB-first keystream after initialization, no
  * GSM burst framing or padding. The same operation encrypts and decrypts.
  * Supports exact in-place operation, not partially overlapping buffers. */
-bool a51_crypt(const uint8_t key[A51_KEY_SIZE], uint32_t frame,
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+bool a51_crypt(const uint8_t key[A51_KEY_SIZE], uint32_t frame, const uint8_t *input, size_t length,
+               uint8_t *output, size_t capacity, size_t *written);
 
 #endif

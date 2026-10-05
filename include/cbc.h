@@ -13,9 +13,11 @@ typedef void (*CbcBlockTransform)(uint8_t *block, const uint8_t *key);
  * operation is supported; other overlapping buffers are not supported.
  * Decryption requires capacity >= ciphertext length and clears output on
  * invalid padding. The caller's IV is never modified. */
-bool cbc_encrypt(CbcBlockTransform transform, size_t block_size, const uint8_t *key, const uint8_t *iv,
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
-bool cbc_decrypt(CbcBlockTransform transform, size_t block_size, const uint8_t *key, const uint8_t *iv,
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+bool cbc_encrypt(CbcBlockTransform transform, size_t block_size, const uint8_t *key,
+                 const uint8_t *iv, const uint8_t *input, size_t length, uint8_t *output,
+                 size_t capacity, size_t *written);
+bool cbc_decrypt(CbcBlockTransform transform, size_t block_size, const uint8_t *key,
+                 const uint8_t *iv, const uint8_t *input, size_t length, uint8_t *output,
+                 size_t capacity, size_t *written);
 
 #endif

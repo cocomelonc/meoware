@@ -13,8 +13,10 @@
 void speck_encrypt_block(uint8_t block[SPECK_BLOCK_SIZE], const uint8_t key[SPECK_KEY_SIZE]);
 void speck_decrypt_block(uint8_t block[SPECK_BLOCK_SIZE], const uint8_t key[SPECK_KEY_SIZE]);
 bool speck_cbc_encrypt(const uint8_t key[SPECK_KEY_SIZE], const uint8_t iv[SPECK_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                       const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                       size_t *written);
 bool speck_cbc_decrypt(const uint8_t key[SPECK_KEY_SIZE], const uint8_t iv[SPECK_BLOCK_SIZE],
-  const uint8_t *input, size_t length, uint8_t *output, size_t capacity, size_t *written);
+                       const uint8_t *input, size_t length, uint8_t *output, size_t capacity,
+                       size_t *written);
 
 #endif

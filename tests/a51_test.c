@@ -8,13 +8,12 @@ static void check_vector(void) {
   /* Osmocom's A5/1 test: both 114-bit directions, with its key-byte order
    * reversed for this API and GSM FN=123456 converted to raw COUNT.
    * https://github.com/osmocom/libosmocore/blob/master/tests/a5/a5_test.c */
-  const uint8_t key[8] = { 0xef,0xcd,0xab,0x89,0x67,0x45,0x23,0x01 };
+  const uint8_t key[8] = {0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01};
   const uint8_t expected[2][15] = {
-    { 0xcb,0xa2,0x55,0x76,0x17,0x5d,0x3b,0x1c,0x7b,0x2f,0x29,0xa8,0xc1,0xb6,0x00 },
-    { 0xd9,0x03,0x5e,0x0f,0x2a,0xec,0x13,0x9a,0x05,0xd4,0xa8,0x7b,0xb1,0x64,0x80 }
-  };
+      {0xcb, 0xa2, 0x55, 0x76, 0x17, 0x5d, 0x3b, 0x1c, 0x7b, 0x2f, 0x29, 0xa8, 0xc1, 0xb6, 0x00},
+      {0xd9, 0x03, 0x5e, 0x0f, 0x2a, 0xec, 0x13, 0x9a, 0x05, 0xd4, 0xa8, 0x7b, 0xb1, 0x64, 0x80}};
   uint32_t frame = ((123456U / 1326) << 11) | ((123456U % 51) << 5) | (123456U % 26);
-  uint8_t plain[29] = { 0 }, output[29], restored[29];
+  uint8_t plain[29] = {0}, output[29], restored[29];
   size_t written;
   assert(a51_crypt(key, frame, plain, sizeof(plain), output, sizeof(output), &written));
   assert(written == sizeof(plain));
@@ -30,7 +29,7 @@ static void check_vector(void) {
 }
 
 int main(void) {
-  const uint8_t key[8] = { 1,2,3,4,5,6,7,8 };
+  const uint8_t key[8] = {1, 2, 3, 4, 5, 6, 7, 8};
   uint8_t plain[32768], cipher[32768], restored[32768];
   size_t written = 0;
   check_vector();
@@ -50,7 +49,8 @@ int main(void) {
   assert(a51_crypt(key, 2, plain, 32, restored, 32, &written));
   assert(memcmp(cipher, restored, 32));
   uint8_t changed_key[8];
-  memcpy(changed_key, key, sizeof(key)); changed_key[0] ^= 1;
+  memcpy(changed_key, key, sizeof(key));
+  changed_key[0] ^= 1;
   assert(a51_crypt(changed_key, 1, plain, 32, restored, 32, &written));
   assert(memcmp(cipher, restored, 32));
 

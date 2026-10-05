@@ -8,30 +8,23 @@
 #include "resource.h"
 #include "telegram.h"
 
-#define ID_RUN     1001
-#define ID_RESTORE   1002
-#define ID_NOTE    1003
+#define ID_RUN 1001
+#define ID_RESTORE 1002
+#define ID_NOTE 1003
 #define ID_TRANSFER 1004
-#define ID_RECEIPT  1005
-#define ID_VIEW     1006
+#define ID_RECEIPT 1005
+#define ID_VIEW 1006
 #define ID_ALGORITHM 1007
-#define ID_TIMER   1
+#define ID_TIMER 1
 #define COUNTDOWN_SECONDS (24UL * 60UL * 60UL)
 #define LOG_CAPACITY 6
 #define DEMO_MEOWCOINS 25U
 
 static const char *WINDOW_CLASS = "MeowareEduWindow";
-static const char *sample_names[LAB_SAMPLE_COUNT] = {
-  "sample1.txt", "sample2.txt", "sample3.txt", "sample4.txt", "sample5.txt"
-};
+static const char *sample_names[LAB_SAMPLE_COUNT] = {"sample1.txt", "sample2.txt", "sample3.txt",
+                                                     "sample4.txt", "sample5.txt"};
 
-typedef enum {
-  DEMO_READY,
-  DEMO_RUNNING,
-  DEMO_RESTORED,
-  DEMO_EXPIRED,
-  DEMO_ERROR
-} DemoState;
+typedef enum { DEMO_READY, DEMO_RUNNING, DEMO_RESTORED, DEMO_EXPIRED, DEMO_ERROR } DemoState;
 
 typedef struct {
   char time[12];
@@ -94,31 +87,44 @@ enum {
 
 static COLORREF state_color(void) {
   switch (g_state) {
-  case DEMO_RUNNING: return COLOR_RED;
-  case DEMO_RESTORED: return COLOR_TEAL;
-  case DEMO_EXPIRED: return COLOR_RED;
-  case DEMO_ERROR: return COLOR_RED;
-  default: return COLOR_ACCENT;
+    case DEMO_RUNNING:
+      return COLOR_RED;
+    case DEMO_RESTORED:
+      return COLOR_TEAL;
+    case DEMO_EXPIRED:
+      return COLOR_RED;
+    case DEMO_ERROR:
+      return COLOR_RED;
+    default:
+      return COLOR_ACCENT;
   }
 }
 
 static COLORREF state_tint(void) {
   switch (g_state) {
-  case DEMO_RUNNING:
-  case DEMO_EXPIRED:
-  case DEMO_ERROR: return COLOR_ROSE;
-  case DEMO_RESTORED: return COLOR_MINT;
-  default: return COLOR_PANEL_ALT;
+    case DEMO_RUNNING:
+    case DEMO_EXPIRED:
+    case DEMO_ERROR:
+      return COLOR_ROSE;
+    case DEMO_RESTORED:
+      return COLOR_MINT;
+    default:
+      return COLOR_PANEL_ALT;
   }
 }
 
 static const char *state_text(void) {
   switch (g_state) {
-  case DEMO_RUNNING: return "ENCRYPTED - RESTORE AVAILABLE";
-  case DEMO_RESTORED: return "RESTORED - LAB COMPLETE";
-  case DEMO_EXPIRED: return "DEADLINE - DEMO FILES REMOVED";
-  case DEMO_ERROR: return "LAB INITIALIZATION ERROR";
-  default: return "READY - ISOLATED LAB";
+    case DEMO_RUNNING:
+      return "ENCRYPTED - RESTORE AVAILABLE";
+    case DEMO_RESTORED:
+      return "RESTORED - LAB COMPLETE";
+    case DEMO_EXPIRED:
+      return "DEADLINE - DEMO FILES REMOVED";
+    case DEMO_ERROR:
+      return "LAB INITIALIZATION ERROR";
+    default:
+      return "READY - ISOLATED LAB";
   }
 }
 
@@ -131,14 +137,14 @@ static void add_log(const char *text) {
     --g_log_count;
   }
   GetLocalTime(&now);
-  snprintf(g_log[g_log_count].time, sizeof(g_log[g_log_count].time),
-       "%02u:%02u", (unsigned int)now.wHour, (unsigned int)now.wMinute);
+  snprintf(g_log[g_log_count].time, sizeof(g_log[g_log_count].time), "%02u:%02u",
+           (unsigned int)now.wHour, (unsigned int)now.wMinute);
   snprintf(g_log[g_log_count].text, sizeof(g_log[g_log_count].text), "%s", text);
   ++g_log_count;
 }
 
 static int show_message(HWND window, const char *message, const char *title) {
-  MSGBOXPARAMSA options = { 0 };
+  MSGBOXPARAMSA options = {0};
   options.cbSize = sizeof(options);
   options.hwndOwner = window;
   options.hInstance = GetModuleHandleA(NULL);
@@ -169,11 +175,13 @@ static void update_buttons(void) {
   if (g_run_button != NULL) InvalidateRect(g_run_button, NULL, TRUE);
   if (g_restore_button != NULL) InvalidateRect(g_restore_button, NULL, TRUE);
   if (g_note_button != NULL) InvalidateRect(g_note_button, NULL, TRUE);
-  EnableWindow(g_transfer_button, g_state == DEMO_RUNNING &&
-    (g_telegram_state == TELEGRAM_IDLE || g_telegram_state == TELEGRAM_FAILED));
-  SetWindowTextA(g_transfer_button, g_telegram_state == TELEGRAM_FAILED ? "Retry transfer" :
-    g_telegram_state == TELEGRAM_SENDING ? "Sending to Telegram..." :
-    g_telegram_state == TELEGRAM_WAITING ? "Awaiting approval" : "Simulate transfer");
+  EnableWindow(g_transfer_button, g_state == DEMO_RUNNING && (g_telegram_state == TELEGRAM_IDLE ||
+                                                              g_telegram_state == TELEGRAM_FAILED));
+  SetWindowTextA(g_transfer_button, g_telegram_state == TELEGRAM_FAILED ? "Retry transfer"
+                                    : g_telegram_state == TELEGRAM_SENDING
+                                        ? "Sending to Telegram..."
+                                    : g_telegram_state == TELEGRAM_WAITING ? "Awaiting approval"
+                                                                           : "Simulate transfer");
   EnableWindow(g_receipt_button, g_state == DEMO_RUNNING || g_telegram_state == TELEGRAM_APPROVED);
   ShowWindow(g_transfer_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
   ShowWindow(g_receipt_button, g_payment_view ? SW_SHOWNA : SW_HIDE);
@@ -199,7 +207,7 @@ static void on_run(HWND window) {
   SetTimer(window, ID_TIMER, 1000, NULL);
   update_buttons();
   snprintf(event, sizeof(event), "Five samples encrypted with %s.",
-    crypto_algorithm_info(g_lab.crypto.selected)->name);
+           crypto_algorithm_info(g_lab.crypto.selected)->name);
   add_log(event);
   add_log("Encrypted copies use the .meoware extension.");
   InvalidateRect(window, NULL, FALSE);
@@ -229,12 +237,13 @@ static void on_restore(HWND window) {
 }
 
 static void on_note(HWND window) {
-  show_message(window,
-        "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
-        "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
-        "Payment demo uses 25 fictional meowcoins. Simulate transfer sends a Telegram request. The configured operator presses Payment: OK - send receipt; the GUI displays a demo receipt and restores the samples. No real money or blockchain is involved.\r\n\r\n"
-        "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
-        "Meoware EDU - demonstration note");
+  show_message(
+      window,
+      "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
+      "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
+      "Payment demo uses 25 fictional meowcoins. Simulate transfer sends a Telegram request. The configured operator presses Payment: OK - send receipt; the GUI displays a demo receipt and restores the samples. No real money or blockchain is involved.\r\n\r\n"
+      "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
+      "Meoware EDU - demonstration note");
 }
 
 static void on_deadline(HWND window) {
@@ -248,9 +257,10 @@ static void on_deadline(HWND window) {
     update_buttons();
     add_log("Deadline reached; generated encrypted samples removed.");
     InvalidateRect(window, NULL, FALSE);
-    show_message(window,
-          "The deadline scenario removed only the five sample files generated in this lab folder.",
-          "Meoware EDU - deadline");
+    show_message(
+        window,
+        "The deadline scenario removed only the five sample files generated in this lab folder.",
+        "Meoware EDU - deadline");
   } else {
     show_error(window, error);
   }
@@ -269,7 +279,8 @@ static void on_transfer(HWND window) {
   if (!payment_session_active(window)) return;
   if (g_telegram_state != TELEGRAM_IDLE && g_telegram_state != TELEGRAM_FAILED) return;
   if (!telegram_start(window, g_receipt_reference)) {
-    show_message(window, "Could not start Telegram delivery. Please retry.", "Meoware EDU - Telegram");
+    show_message(window, "Could not start Telegram delivery. Please retry.",
+                 "Meoware EDU - Telegram");
     return;
   }
   g_telegram_state = TELEGRAM_SENDING;
@@ -281,14 +292,19 @@ static void on_transfer(HWND window) {
 static void on_receipt(HWND window) {
   char message[512];
   if (g_telegram_state == TELEGRAM_APPROVED) {
-    snprintf(message, sizeof(message), "MEOWCOINS - DEMO RECEIPT\r\n=^..^=\r\n\r\n"
-      "Receipt: MEOWARE-DEMO-%s\r\nAmount: 25 meowcoins\r\n"
-      "Status: approved by the lab operator\r\n\r\nFictional meowcoins. No real payment.", g_receipt_reference);
+    snprintf(message, sizeof(message),
+             "MEOWCOINS - DEMO RECEIPT\r\n=^..^=\r\n\r\n"
+             "Receipt: MEOWARE-DEMO-%s\r\nAmount: 25 meowcoins\r\n"
+             "Status: approved by the lab operator\r\n\r\nFictional meowcoins. No real payment.",
+             g_receipt_reference);
   } else {
-    snprintf(message, sizeof(message), "%s", g_telegram_state == TELEGRAM_IDLE
-      ? "Click Simulate transfer to send a request to your Telegram chat."
-      : g_telegram_state == TELEGRAM_FAILED ? "Delivery failed. Click Retry transfer or restore the samples locally."
-      : "In Telegram, press Payment: OK - send receipt on the current request. Keep this GUI open.");
+    snprintf(
+        message, sizeof(message), "%s",
+        g_telegram_state == TELEGRAM_IDLE
+            ? "Click Simulate transfer to send a request to your Telegram chat."
+        : g_telegram_state == TELEGRAM_FAILED
+            ? "Delivery failed. Click Retry transfer or restore the samples locally."
+            : "In Telegram, press Payment: OK - send receipt on the current request. Keep this GUI open.");
   }
   show_message(window, message, "Meoware EDU - demo receipt");
 }
@@ -299,16 +315,16 @@ static void set_font(HDC dc, HFONT font) {
 
 static HFONT create_mono_font(int height, int weight) {
   HDC dc = GetDC(NULL);
-  const char *faces[] = { "Consolas", "Courier New" };
+  const char *faces[] = {"Consolas", "Courier New"};
   HFONT font = NULL;
   unsigned int i;
 
   for (i = 0; i < sizeof(faces) / sizeof(faces[0]); ++i) {
-    char actual_face[LF_FACESIZE] = { 0 };
+    char actual_face[LF_FACESIZE] = {0};
     HGDIOBJ previous;
-    font = CreateFontA(-height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
-      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-      CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, faces[i]);
+    font = CreateFontA(-height, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                       FIXED_PITCH | FF_MODERN, faces[i]);
     if (font == NULL || dc == NULL) break;
     previous = SelectObject(dc, font);
     GetTextFaceA(dc, sizeof(actual_face), actual_face);
@@ -321,17 +337,17 @@ static HFONT create_mono_font(int height, int weight) {
   return font;
 }
 
-static void draw_text(HDC dc, const char *text, int x, int y, int width, int height,
-            COLORREF color, HFONT font, UINT format) {
-  RECT rect = { x, y, x + width, y + height };
+static void draw_text(HDC dc, const char *text, int x, int y, int width, int height, COLORREF color,
+                      HFONT font, UINT format) {
+  RECT rect = {x, y, x + width, y + height};
   SetBkMode(dc, TRANSPARENT);
   SetTextColor(dc, color);
   set_font(dc, font);
   DrawTextA(dc, text, -1, &rect, format | DT_NOPREFIX);
 }
 
-static void fill_round_rect(HDC dc, int x, int y, int width, int height,
-              int radius, COLORREF fill, COLORREF border) {
+static void fill_round_rect(HDC dc, int x, int y, int width, int height, int radius, COLORREF fill,
+                            COLORREF border) {
   HBRUSH brush = CreateSolidBrush(fill);
   HPEN pen = CreatePen(PS_SOLID, 1, border);
   HGDIOBJ old_brush = SelectObject(dc, brush);
@@ -345,7 +361,7 @@ static void fill_round_rect(HDC dc, int x, int y, int width, int height,
 }
 
 static void fill_rect(HDC dc, int x, int y, int width, int height, COLORREF color) {
-  RECT rect = { x, y, x + width, y + height };
+  RECT rect = {x, y, x + width, y + height};
   HBRUSH brush = CreateSolidBrush(color);
   FillRect(dc, &rect, brush);
   DeleteObject(brush);
@@ -374,39 +390,53 @@ static void draw_payment(HDC dc, int x) {
 
   if (g_state == DEMO_RUNNING) {
     switch (g_telegram_state) {
-    case TELEGRAM_IDLE: hint = "Send a demo request to your Telegram chat."; break;
-    case TELEGRAM_APPROVED: hint = "Operator approved. Restoring lab samples."; break;
-    case TELEGRAM_FAILED: hint = "Telegram delivery failed. Retry or restore locally."; break;
-    default: hint = "In Telegram: Payment: OK - send receipt."; break;
+      case TELEGRAM_IDLE:
+        hint = "Send a demo request to your Telegram chat.";
+        break;
+      case TELEGRAM_APPROVED:
+        hint = "Operator approved. Restoring lab samples.";
+        break;
+      case TELEGRAM_FAILED:
+        hint = "Telegram delivery failed. Retry or restore locally.";
+        break;
+      default:
+        hint = "In Telegram: Payment: OK - send receipt.";
+        break;
     }
   } else {
-    hint = g_state == DEMO_READY ? "Run demo to start the payment scenario." :
-      g_state == DEMO_RESTORED ? "Samples restored / session complete." : "Session closed / transfers unavailable.";
+    hint = g_state == DEMO_READY      ? "Run demo to start the payment scenario."
+           : g_state == DEMO_RESTORED ? "Samples restored / session complete."
+                                      : "Session closed / transfers unavailable.";
   }
-  draw_text(dc, "PAYMENT DEMO", x + 22, 369, 456, 23,
-    COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Fictional meowcoins only / no real payment", x + 22, 394, 456, 18,
-    COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "PAYMENT DEMO", x + 22, 369, 456, 23, COLOR_TEXT, g_font_heading,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "Fictional meowcoins only / no real payment", x + 22, 394, 456, 18, COLOR_MUTED,
+            g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   snprintf(summary, sizeof(summary), "Amount: %u meowcoins / Received: %u", DEMO_MEOWCOINS,
-    g_telegram_state == TELEGRAM_APPROVED ? DEMO_MEOWCOINS : 0U);
-  draw_text(dc, summary, x + 22, 425, 456, 22,
-    COLOR_TEXT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  if (g_receipt_reference[0]) snprintf(summary, sizeof(summary), "Receipt: MEOWARE-DEMO-%s", g_receipt_reference);
-  else snprintf(summary, sizeof(summary), "Destination: configured Telegram chat");
-  draw_text(dc, summary, x + 22, 453, 456, 20,
-    COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  snprintf(summary, sizeof(summary), "%s", g_telegram_state == TELEGRAM_APPROVED ? "Receipt approved in Telegram" :
-    g_telegram_state == TELEGRAM_WAITING ? "Waiting for operator approval" :
-    g_telegram_state == TELEGRAM_SENDING ? "Sending request to Telegram..." : "Telegram approval required");
-  draw_text(dc, summary, x + 22, 482, 456, 20,
-    ink, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  unsigned int progress = g_telegram_state == TELEGRAM_APPROVED ? 3 : g_telegram_state == TELEGRAM_WAITING ? 1 : 0;
+           g_telegram_state == TELEGRAM_APPROVED ? DEMO_MEOWCOINS : 0U);
+  draw_text(dc, summary, x + 22, 425, 456, 22, COLOR_TEXT, g_font_mono,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  if (g_receipt_reference[0])
+    snprintf(summary, sizeof(summary), "Receipt: MEOWARE-DEMO-%s", g_receipt_reference);
+  else
+    snprintf(summary, sizeof(summary), "Destination: configured Telegram chat");
+  draw_text(dc, summary, x + 22, 453, 456, 20, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  snprintf(summary, sizeof(summary), "%s",
+           g_telegram_state == TELEGRAM_APPROVED  ? "Receipt approved in Telegram"
+           : g_telegram_state == TELEGRAM_WAITING ? "Waiting for operator approval"
+           : g_telegram_state == TELEGRAM_SENDING ? "Sending request to Telegram..."
+                                                  : "Telegram approval required");
+  draw_text(dc, summary, x + 22, 482, 456, 20, ink, g_font_mono,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  unsigned int progress = g_telegram_state == TELEGRAM_APPROVED  ? 3
+                          : g_telegram_state == TELEGRAM_WAITING ? 1
+                                                                 : 0;
   for (step = 0; step < 3; ++step) {
     COLORREF color = step < progress ? COLOR_TEAL : COLOR_TRACK;
     fill_round_rect(dc, x + 22 + (int)step * 154, 512, 146, 5, 4, color, color);
   }
-  draw_text(dc, hint, x + 22, 530, 456, 30,
-    ink, g_font_small, DT_LEFT | DT_WORDBREAK);
+  draw_text(dc, hint, x + 22, 530, 456, 30, ink, g_font_small, DT_LEFT | DT_WORDBREAK);
 }
 
 static void draw_dashboard(HWND window, HDC dc) {
@@ -415,7 +445,7 @@ static void draw_dashboard(HWND window, HDC dc) {
   char path_text[MAX_PATH + 32];
   char algorithm_text[100];
   const CryptoInfo *algorithm = crypto_algorithm_info(
-    g_lab.crypto.initialized ? g_lab.crypto.selected : g_selected_algorithm);
+      g_lab.crypto.initialized ? g_lab.crypto.selected : g_selected_algorithm);
   ULONGLONG seconds = 24UL * 60UL * 60UL;
   int client_width;
   int left_x = 28;
@@ -434,26 +464,25 @@ static void draw_dashboard(HWND window, HDC dc) {
 
   fill_round_rect(dc, 29, 24, 80, 44, 16, COLOR_PANEL_ALT, COLOR_BORDER);
   draw_text(dc, "=^..^=", 29, 27, 80, 36, COLOR_ACCENT_DARK, g_font_heading,
-        DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DT_CENTER | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "MEOWARE", 124, 22, 260, 32, COLOR_TEXT, g_font_title,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "EDU  /  BEHAVIOR LAB", 126, 57, 430, 20,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  fill_round_rect(dc, client_width - 190, 31, 160, 30, 15,
-          COLOR_MINT, COLOR_MINT);
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "EDU  /  BEHAVIOR LAB", 126, 57, 430, 20, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  fill_round_rect(dc, client_width - 190, 31, 160, 30, 15, COLOR_MINT, COLOR_MINT);
   draw_status_dot(dc, client_width - 174, 42, COLOR_TEAL);
-  draw_text(dc, "LOCAL DEMO", client_width - 158, 36, 116, 20,
-        COLOR_TEAL, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "LOCAL DEMO", client_width - 158, 36, 116, 20, COLOR_TEAL, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   fill_rect(dc, 28, 83, client_width - 56, 1, COLOR_BORDER);
 
   draw_card(dc, left_x, 105, card_width, 156);
-  draw_text(dc, "SESSION COUNTDOWN", left_x + 22, 123, card_width - 44, 18,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "SESSION COUNTDOWN", left_x + 22, 123, card_width - 44, 18, COLOR_MUTED,
+            g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   if (g_timer_running) {
     ULONGLONG now = GetTickCount64();
     seconds = (g_deadline > now ? g_deadline - now : 0) / 1000;
-    snprintf(countdown, sizeof(countdown), "%02llu:%02llu:%02llu",
-         seconds / 3600, (seconds / 60) % 60, seconds % 60);
+    snprintf(countdown, sizeof(countdown), "%02llu:%02llu:%02llu", seconds / 3600,
+             (seconds / 60) % 60, seconds % 60);
   } else if (g_state == DEMO_RESTORED) {
     snprintf(countdown, sizeof(countdown), "COMPLETE");
   } else if (g_state == DEMO_EXPIRED) {
@@ -461,55 +490,51 @@ static void draw_dashboard(HWND window, HDC dc) {
   } else {
     snprintf(countdown, sizeof(countdown), "24:00:00");
   }
-  draw_text(dc, countdown, left_x + 20, 146, card_width - 40, 54,
-        COLOR_ACCENT_DARK, g_font_countdown, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, g_timer_running ? "Time remaining in this demonstration" : "A 24-hour behavior window starts with the demo",
-        left_x + 23, 204, card_width - 46, 19, COLOR_MUTED, g_font_small,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, countdown, left_x + 20, 146, card_width - 40, 54, COLOR_ACCENT_DARK,
+            g_font_countdown, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc,
+            g_timer_running ? "Time remaining in this demonstration"
+                            : "A 24-hour behavior window starts with the demo",
+            left_x + 23, 204, card_width - 46, 19, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   fill_round_rect(dc, left_x + 23, 233, card_width - 46, 5, 4, COLOR_TRACK, COLOR_TRACK);
   if (g_timer_running) {
     ULONGLONG elapsed = GetTickCount64() > g_started ? GetTickCount64() - g_started : 0;
-    int progress = (int)((card_width - 46) * elapsed /
-              ((ULONGLONG)COUNTDOWN_SECONDS * 1000));
+    int progress = (int)((card_width - 46) * elapsed / ((ULONGLONG)COUNTDOWN_SECONDS * 1000));
     if (progress > card_width - 46) progress = card_width - 46;
     if (progress > 0) {
       fill_round_rect(dc, left_x + 23, 233, progress, 5, 4, COLOR_ACCENT, COLOR_ACCENT);
     }
   } else if (g_state == DEMO_RESTORED || g_state == DEMO_EXPIRED) {
-    fill_round_rect(dc, left_x + 23, 233, card_width - 46, 5, 4,
-            state_color(), state_color());
+    fill_round_rect(dc, left_x + 23, 233, card_width - 46, 5, 4, state_color(), state_color());
   }
 
   draw_card(dc, right_x, 105, 500, 156);
-  draw_text(dc, "LAB STATUS", right_x + 22, 123, 456, 18,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  fill_round_rect(dc, right_x + 21, 150, 456, 30, 15,
-          state_tint(), state_tint());
+  draw_text(dc, "LAB STATUS", right_x + 22, 123, 456, 18, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  fill_round_rect(dc, right_x + 21, 150, 456, 30, 15, state_tint(), state_tint());
   draw_status_dot(dc, right_x + 33, 160, state_color());
-  draw_text(dc, state_text(), right_x + 50, 154, 420, 22,
-        state_color(), g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Scope", right_x + 23, 193, 60, 18,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "5 samples / private folder / demo",
-        right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, state_text(), right_x + 50, 154, 420, 22, state_color(), g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "Scope", right_x + 23, 193, 60, 18, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "5 samples / private folder / demo", right_x + 85, 193, 392, 18, COLOR_TEXT,
+            g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   if (algorithm->block_size)
     snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
-      algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
+             algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
   else
     snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / stream cipher",
-      algorithm->name, algorithm->key_size * 8);
-  draw_text(dc, algorithm_text, right_x + 23, 220, 456, 18,
-        COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "ALGORITHM", 790, 267, 262, 17, COLOR_MUTED,
-    g_font_small, DT_LEFT | DT_SINGLELINE);
+             algorithm->name, algorithm->key_size * 8);
+  draw_text(dc, algorithm_text, right_x + 23, 220, 456, 18, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "ALGORITHM", 790, 267, 262, 17, COLOR_MUTED, g_font_small, DT_LEFT | DT_SINGLELINE);
 
   draw_card(dc, left_x, 351, card_width, 277);
-  draw_text(dc, "SAMPLE FILES", left_x + 22, 369, card_width - 44, 23,
-        COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Bundled educational sample files", left_x + 22, 394,
-        card_width - 44, 18, COLOR_MUTED, g_font_small,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "SAMPLE FILES", left_x + 22, 369, card_width - 44, 23, COLOR_TEXT, g_font_heading,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "Bundled educational sample files", left_x + 22, 394, card_width - 44, 18,
+            COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   for (i = 0; i < LAB_SAMPLE_COUNT; ++i) {
     int row_y = 431 + i * 35;
     COLORREF dot = COLOR_TEAL;
@@ -529,12 +554,11 @@ static void draw_dashboard(HWND window, HDC dc) {
       status = "REMOVED";
     }
     draw_status_dot(dc, left_x + 23, row_y + 6, dot);
-    draw_text(dc, sample_names[i], left_x + 43, row_y, 190, 22,
-          COLOR_TEXT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    fill_round_rect(dc, left_x + card_width - 119, row_y + 1, 91, 22,
-            11, tint, tint);
-    draw_text(dc, status, left_x + card_width - 115, row_y + 2, 83, 19,
-          dot, g_font_small, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    draw_text(dc, sample_names[i], left_x + 43, row_y, 190, 22, COLOR_TEXT, g_font_mono,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    fill_round_rect(dc, left_x + card_width - 119, row_y + 1, 91, 22, 11, tint, tint);
+    draw_text(dc, status, left_x + card_width - 115, row_y + 2, 83, 19, dot, g_font_small,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     if (i != LAB_SAMPLE_COUNT - 1) {
       fill_rect(dc, left_x + 22, row_y + 29, card_width - 44, 1, COLOR_BORDER);
     }
@@ -544,30 +568,29 @@ static void draw_dashboard(HWND window, HDC dc) {
   if (g_payment_view) {
     draw_payment(dc, right_x);
   } else {
-    draw_text(dc, "ACTIVITY", right_x + 22, 369, 385, 23,
-          COLOR_TEXT, g_font_heading, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    draw_text(dc, "Local events from this session", right_x + 22, 394, 385, 18,
-          COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(dc, "ACTIVITY", right_x + 22, 369, 385, 23, COLOR_TEXT, g_font_heading,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    draw_text(dc, "Local events from this session", right_x + 22, 394, 385, 18, COLOR_MUTED,
+              g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     for (i = 0; i < (int)g_log_count; ++i) {
       int row_y = 432 + i * 30;
-      draw_text(dc, g_log[i].time, right_x + 22, row_y, 48, 20,
-            COLOR_ACCENT, g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-      draw_text(dc, g_log[i].text, right_x + 78, row_y, 400, 28,
-            COLOR_TEXT, g_font_small, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+      draw_text(dc, g_log[i].time, right_x + 22, row_y, 48, 20, COLOR_ACCENT, g_font_mono,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+      draw_text(dc, g_log[i].text, right_x + 78, row_y, 400, 28, COLOR_TEXT, g_font_small,
+                DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
     }
   }
 
-  fill_round_rect(dc, 28, 646, client_width - 56, 36, 12,
-          COLOR_PANEL_ALT, COLOR_PANEL_ALT);
+  fill_round_rect(dc, 28, 646, client_width - 56, 36, 12, COLOR_PANEL_ALT, COLOR_PANEL_ALT);
   draw_text(dc, "PRIVATE LAB", 42, 655, 100, 18, COLOR_ACCENT_DARK, g_font_small,
-        DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  snprintf(path_text, sizeof(path_text), "%s", g_lab_ready ? lab_directory(&g_lab) : "Lab folder unavailable");
-  draw_text(dc, path_text, 152, 655, client_width - 198, 18, COLOR_MUTED,
-        g_font_mono, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  snprintf(path_text, sizeof(path_text), "%s",
+           g_lab_ready ? lab_directory(&g_lab) : "Lab folder unavailable");
+  draw_text(dc, path_text, 152, 655, client_width - 198, 18, COLOR_MUTED, g_font_mono,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
 }
 
-static void draw_button(const DRAWITEMSTRUCT *item)
-{
+static void draw_button(const DRAWITEMSTRUCT *item) {
   HDC dc = item->hDC;
   RECT r = item->rcItem;
   bool disabled = (item->itemState & ODS_DISABLED) != 0;
@@ -614,7 +637,7 @@ static void draw_button(const DRAWITEMSTRUCT *item)
 
 static LRESULT CALLBACK button_proc(HWND button, UINT message, WPARAM wparam, LPARAM lparam) {
   if (message == WM_MOUSEMOVE && g_hover_button != button) {
-    TRACKMOUSEEVENT track = { sizeof(track), TME_LEAVE, button, 0 };
+    TRACKMOUSEEVENT track = {sizeof(track), TME_LEAVE, button, 0};
     HWND previous = g_hover_button;
     g_hover_button = button;
     TrackMouseEvent(&track);
@@ -641,8 +664,8 @@ static void draw_algorithm_picker(HWND picker, HDC dc) {
 
   GetClientRect(picker, &bounds);
   fill_rect(dc, 0, 0, bounds.right, bounds.bottom, COLOR_BG);
-  fill_round_rect(dc, 0, 0, bounds.right, bounds.bottom, 18,
-    active ? COLOR_PANEL_ALT : COLOR_PANEL, active ? COLOR_ACCENT : COLOR_BORDER);
+  fill_round_rect(dc, 0, 0, bounds.right, bounds.bottom, 18, active ? COLOR_PANEL_ALT : COLOR_PANEL,
+                  active ? COLOR_ACCENT : COLOR_BORDER);
   if (focused && enabled) {
     HGDIOBJ old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
     pen = CreatePen(PS_SOLID, 1, COLOR_ACCENT);
@@ -652,17 +675,16 @@ static void draw_algorithm_picker(HWND picker, HDC dc) {
     SelectObject(dc, old_brush);
     DeleteObject(pen);
   }
-  draw_text(dc, algorithm != NULL ? algorithm->name : "Select algorithm",
-    16, 0, bounds.right - 72, bounds.bottom, ink, g_font_body,
-    DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, algorithm != NULL ? algorithm->name : "Select algorithm", 16, 0, bounds.right - 72,
+            bounds.bottom, ink, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
   arrow_x = bounds.right - 27;
   middle = bounds.bottom / 2;
   fill_round_rect(dc, bounds.right - 45, middle - 14, 34, 28, 10,
-    enabled ? COLOR_PANEL_ALT : COLOR_BG, enabled ? COLOR_PANEL_ALT : COLOR_BG);
-  chevron[0] = (POINT){ arrow_x - 5, middle + (g_picker_open ? 2 : -2) };
-  chevron[1] = (POINT){ arrow_x, middle + (g_picker_open ? -3 : 3) };
-  chevron[2] = (POINT){ arrow_x + 5, chevron[0].y };
+                  enabled ? COLOR_PANEL_ALT : COLOR_BG, enabled ? COLOR_PANEL_ALT : COLOR_BG);
+  chevron[0] = (POINT){arrow_x - 5, middle + (g_picker_open ? 2 : -2)};
+  chevron[1] = (POINT){arrow_x, middle + (g_picker_open ? -3 : 3)};
+  chevron[2] = (POINT){arrow_x + 5, chevron[0].y};
   pen = CreatePen(PS_SOLID, 2, ink);
   previous = SelectObject(dc, pen);
   Polyline(dc, chevron, 3);
@@ -682,23 +704,26 @@ static void draw_algorithm_option(const DRAWITEMSTRUCT *item) {
   if (algorithm != NULL) {
     if (item->itemState & ODS_COMBOBOXEDIT) {
       draw_text(item->hDC, algorithm->name, r.left + 12, r.top, r.right - r.left - 24,
-        r.bottom - r.top, COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                r.bottom - r.top, COLOR_ACCENT_DARK, g_font_body,
+                DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     } else {
       if (highlighted || selected) {
         COLORREF tint = highlighted ? COLOR_PANEL_ALT : COLOR_MINT;
         fill_round_rect(item->hDC, r.left + 5, r.top + 4, r.right - r.left - 10,
-          r.bottom - r.top - 8, 12, tint, tint);
+                        r.bottom - r.top - 8, 12, tint, tint);
       }
-      draw_text(item->hDC, algorithm->name, r.left + 16, r.top + 9, r.right - r.left - 52,
-        21, COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+      draw_text(item->hDC, algorithm->name, r.left + 16, r.top + 9, r.right - r.left - 52, 21,
+                COLOR_ACCENT_DARK, g_font_body, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
       if (algorithm->block_size)
-        snprintf(detail, sizeof(detail), "%u-bit key / %u-bit block", algorithm->key_size * 8, algorithm->block_size * 8);
+        snprintf(detail, sizeof(detail), "%u-bit key / %u-bit block", algorithm->key_size * 8,
+                 algorithm->block_size * 8);
       else
         snprintf(detail, sizeof(detail), "%u-bit key / stream cipher", algorithm->key_size * 8);
-      draw_text(item->hDC, detail, r.left + 16, r.top + 32, r.right - r.left - 32,
-        18, COLOR_MUTED, g_font_small, DT_LEFT | DT_SINGLELINE);
+      draw_text(item->hDC, detail, r.left + 16, r.top + 32, r.right - r.left - 32, 18, COLOR_MUTED,
+                g_font_small, DT_LEFT | DT_SINGLELINE);
       if (selected) {
-        POINT check[] = { { r.right - 32, r.top + 20 }, { r.right - 28, r.top + 24 }, { r.right - 21, r.top + 16 } };
+        POINT check[] = {
+            {r.right - 32, r.top + 20}, {r.right - 28, r.top + 24}, {r.right - 21, r.top + 16}};
         HPEN pen = CreatePen(PS_SOLID, 2, COLOR_TEAL);
         HGDIOBJ previous = SelectObject(item->hDC, pen);
         Polyline(item->hDC, check, 3);
@@ -712,7 +737,8 @@ static void draw_algorithm_option(const DRAWITEMSTRUCT *item) {
 
 /* Keep the native combo's selection, keyboard navigation, and accessibility;
  * only replace its painting and the popup's outer frame. */
-static LRESULT CALLBACK algorithm_picker_proc(HWND picker, UINT message, WPARAM wparam, LPARAM lparam) {
+static LRESULT CALLBACK algorithm_picker_proc(HWND picker, UINT message, WPARAM wparam,
+                                              LPARAM lparam) {
   LRESULT result;
   if (message == WM_PAINT || message == WM_PRINTCLIENT) {
     PAINTSTRUCT paint;
@@ -725,7 +751,7 @@ static LRESULT CALLBACK algorithm_picker_proc(HWND picker, UINT message, WPARAM 
   }
   if (message == WM_ERASEBKGND) return 1;
   if (message == WM_MOUSEMOVE && !g_picker_hover) {
-    TRACKMOUSEEVENT track = { sizeof(track), TME_LEAVE, picker, 0 };
+    TRACKMOUSEEVENT track = {sizeof(track), TME_LEAVE, picker, 0};
     g_picker_hover = true;
     TrackMouseEvent(&track);
   } else if (message == WM_MOUSELEAVE) {
@@ -733,11 +759,19 @@ static LRESULT CALLBACK algorithm_picker_proc(HWND picker, UINT message, WPARAM 
   }
   result = CallWindowProcA(g_picker_proc, picker, message, wparam, lparam);
   switch (message) {
-  case WM_MOUSEMOVE: case WM_MOUSELEAVE: case WM_SETFOCUS: case WM_KILLFOCUS:
-  case WM_ENABLE: case WM_KEYDOWN: case WM_KEYUP: case WM_LBUTTONDOWN:
-  case WM_LBUTTONUP: case CB_SHOWDROPDOWN: case CB_SETCURSEL:
-    InvalidateRect(picker, NULL, FALSE);
-    break;
+    case WM_MOUSEMOVE:
+    case WM_MOUSELEAVE:
+    case WM_SETFOCUS:
+    case WM_KILLFOCUS:
+    case WM_ENABLE:
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case CB_SHOWDROPDOWN:
+    case CB_SETCURSEL:
+      InvalidateRect(picker, NULL, FALSE);
+      break;
   }
   return result;
 }
@@ -765,7 +799,7 @@ static LRESULT CALLBACK algorithm_list_proc(HWND list, UINT message, WPARAM wpar
       HRGN outline;
       GetWindowRect(list, &bounds);
       outline = CreateRoundRectRgn(0, 0, bounds.right - bounds.left + 1,
-        bounds.bottom - bounds.top + 1, 16, 16);
+                                   bounds.bottom - bounds.top + 1, 16, 16);
       if (outline != NULL && !SetWindowRgn(list, outline, TRUE)) DeleteObject(outline);
     }
     return result;
@@ -773,194 +807,208 @@ static LRESULT CALLBACK algorithm_list_proc(HWND list, UINT message, WPARAM wpar
   return CallWindowProcA(g_picker_list_proc, list, message, wparam, lparam);
 }
 
-static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
-{
+static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam) {
   switch (message) {
-  case WM_CREATE: {
-    char error[256];
-    size_t algorithm_index;
-    COMBOBOXINFO picker_info = { 0 };
+    case WM_CREATE: {
+      char error[256];
+      size_t algorithm_index;
+      COMBOBOXINFO picker_info = {0};
 
-    g_run_button = CreateWindowExA(0, "BUTTON", "Run demo",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160, 44,
-      window, (HMENU)(INT_PTR)ID_RUN, GetModuleHandleA(NULL), NULL);
-    g_restore_button = CreateWindowExA(0, "BUTTON", "Restore samples",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 200, 286, 200, 44,
-      window, (HMENU)(INT_PTR)ID_RESTORE, GetModuleHandleA(NULL), NULL);
-    g_note_button = CreateWindowExA(0, "BUTTON", "View note",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 412, 286, 160, 44,
-      window, (HMENU)(INT_PTR)ID_NOTE, GetModuleHandleA(NULL), NULL);
-    g_view_button = CreateWindowExA(0, "BUTTON", "Show activity",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 584, 286, 180, 44,
-      window, (HMENU)(INT_PTR)ID_VIEW, GetModuleHandleA(NULL), NULL);
-    g_transfer_button = CreateWindowExA(0, "BUTTON", "Simulate transfer",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 574, 571, 222, 38,
-      window, (HMENU)(INT_PTR)ID_TRANSFER, GetModuleHandleA(NULL), NULL);
-    g_receipt_button = CreateWindowExA(0, "BUTTON", "Check receipt",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 808, 571, 222, 38,
-      window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
-    g_algorithm_picker = CreateWindowExA(0, "COMBOBOX", "Algorithm",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED | CBS_HASSTRINGS,
-      790, 286, 262, 440, window, (HMENU)(INT_PTR)ID_ALGORITHM,
-      GetModuleHandleA(NULL), NULL);
-    SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
-    SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, (WPARAM)-1, 38);
-    SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, 0, 60);
-    for (algorithm_index = 0; algorithm_index < crypto_algorithm_count(); ++algorithm_index) {
-      const CryptoInfo *entry = crypto_algorithm_at(algorithm_index);
-      LRESULT row = SendMessageA(g_algorithm_picker, CB_ADDSTRING, 0, (LPARAM)entry->name);
-      if (row >= 0) SendMessageA(g_algorithm_picker, CB_SETITEMDATA, (WPARAM)row, entry->id);
-    }
-    SendMessageA(g_algorithm_picker, CB_SETCURSEL, 0, 0);
-    g_picker_brush = CreateSolidBrush(COLOR_PANEL);
-    g_picker_proc = (WNDPROC)SetWindowLongPtrA(g_algorithm_picker, GWLP_WNDPROC, (LONG_PTR)algorithm_picker_proc);
-    picker_info.cbSize = sizeof(picker_info);
-    if (GetComboBoxInfo(g_algorithm_picker, &picker_info)) {
-      g_picker_list_proc = (WNDPROC)SetWindowLongPtrA(picker_info.hwndList, GWLP_WNDPROC, (LONG_PTR)algorithm_list_proc);
-    }
-    g_button_proc = (WNDPROC)SetWindowLongPtrA(g_run_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    SetWindowLongPtrA(g_restore_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    SetWindowLongPtrA(g_note_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    SetWindowLongPtrA(g_view_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    SetWindowLongPtrA(g_transfer_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    SetWindowLongPtrA(g_receipt_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
-    EnableWindow(g_restore_button, FALSE);
-    if (!lab_initialize(&g_lab, error, sizeof(error))) {
-      show_error(window, error);
-      add_log("Lab initialization failed.");
-    } else {
-      g_lab_ready = true;
-      add_log("Created isolated folder and five bundled samples.");
-      add_log("Ready - only these generated samples are in scope.");
-    }
-    update_buttons();
-    return 0;
-  }
-  case WM_COMMAND:
-    switch (LOWORD(wparam)) {
-    case ID_ALGORITHM:
-      if (HIWORD(wparam) == CBN_DROPDOWN || HIWORD(wparam) == CBN_CLOSEUP) {
-        g_picker_open = HIWORD(wparam) == CBN_DROPDOWN;
-        if (g_picker_open) g_picker_initial = g_selected_algorithm;
-        InvalidateRect(g_algorithm_picker, NULL, FALSE);
+      g_run_button = CreateWindowExA(
+          0, "BUTTON", "Run demo", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160,
+          44, window, (HMENU)(INT_PTR)ID_RUN, GetModuleHandleA(NULL), NULL);
+      g_restore_button = CreateWindowExA(
+          0, "BUTTON", "Restore samples", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 200,
+          286, 200, 44, window, (HMENU)(INT_PTR)ID_RESTORE, GetModuleHandleA(NULL), NULL);
+      g_note_button = CreateWindowExA(
+          0, "BUTTON", "View note", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 412, 286,
+          160, 44, window, (HMENU)(INT_PTR)ID_NOTE, GetModuleHandleA(NULL), NULL);
+      g_view_button = CreateWindowExA(
+          0, "BUTTON", "Show activity", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 584, 286,
+          180, 44, window, (HMENU)(INT_PTR)ID_VIEW, GetModuleHandleA(NULL), NULL);
+      g_transfer_button = CreateWindowExA(
+          0, "BUTTON", "Simulate transfer", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 574,
+          571, 222, 38, window, (HMENU)(INT_PTR)ID_TRANSFER, GetModuleHandleA(NULL), NULL);
+      g_receipt_button = CreateWindowExA(
+          0, "BUTTON", "Check receipt", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 808, 571,
+          222, 38, window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
+      g_algorithm_picker = CreateWindowExA(
+          0, "COMBOBOX", "Algorithm",
+          WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED |
+              CBS_HASSTRINGS,
+          790, 286, 262, 440, window, (HMENU)(INT_PTR)ID_ALGORITHM, GetModuleHandleA(NULL), NULL);
+      SendMessageA(g_algorithm_picker, WM_SETFONT, (WPARAM)g_font_body, TRUE);
+      SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, (WPARAM)-1, 38);
+      SendMessageA(g_algorithm_picker, CB_SETITEMHEIGHT, 0, 60);
+      for (algorithm_index = 0; algorithm_index < crypto_algorithm_count(); ++algorithm_index) {
+        const CryptoInfo *entry = crypto_algorithm_at(algorithm_index);
+        LRESULT row = SendMessageA(g_algorithm_picker, CB_ADDSTRING, 0, (LPARAM)entry->name);
+        if (row >= 0) SendMessageA(g_algorithm_picker, CB_SETITEMDATA, (WPARAM)row, entry->id);
       }
-      if (HIWORD(wparam) == CBN_SELENDCANCEL && g_state == DEMO_READY) {
-        size_t index;
-        g_selected_algorithm = g_picker_initial;
-        for (index = 0; index < crypto_algorithm_count(); ++index) {
-          if (crypto_algorithm_at(index)->id == g_selected_algorithm) {
-            SendMessageA(g_algorithm_picker, CB_SETCURSEL, index, 0);
-            break;
-          }
-        }
-        InvalidateRect(window, NULL, FALSE);
+      SendMessageA(g_algorithm_picker, CB_SETCURSEL, 0, 0);
+      g_picker_brush = CreateSolidBrush(COLOR_PANEL);
+      g_picker_proc = (WNDPROC)SetWindowLongPtrA(g_algorithm_picker, GWLP_WNDPROC,
+                                                 (LONG_PTR)algorithm_picker_proc);
+      picker_info.cbSize = sizeof(picker_info);
+      if (GetComboBoxInfo(g_algorithm_picker, &picker_info)) {
+        g_picker_list_proc = (WNDPROC)SetWindowLongPtrA(picker_info.hwndList, GWLP_WNDPROC,
+                                                        (LONG_PTR)algorithm_list_proc);
       }
-      if (HIWORD(wparam) == CBN_SELCHANGE && g_state == DEMO_READY) {
-        LRESULT row = SendMessageA(g_algorithm_picker, CB_GETCURSEL, 0, 0);
-        CryptoAlgorithm selected = (CryptoAlgorithm)SendMessageA(g_algorithm_picker, CB_GETITEMDATA, (WPARAM)row, 0);
-        if (crypto_algorithm_info(selected) != NULL) g_selected_algorithm = selected;
-        InvalidateRect(g_algorithm_picker, NULL, FALSE);
-        InvalidateRect(window, NULL, FALSE);
+      g_button_proc = (WNDPROC)SetWindowLongPtrA(g_run_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_restore_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_note_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_view_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_transfer_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_receipt_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      EnableWindow(g_restore_button, FALSE);
+      if (!lab_initialize(&g_lab, error, sizeof(error))) {
+        show_error(window, error);
+        add_log("Lab initialization failed.");
+      } else {
+        g_lab_ready = true;
+        add_log("Created isolated folder and five bundled samples.");
+        add_log("Ready - only these generated samples are in scope.");
       }
+      update_buttons();
       return 0;
-    case ID_RUN: on_run(window); return 0;
-    case ID_RESTORE: on_restore(window); return 0;
-    case ID_NOTE: on_note(window); return 0;
-    case ID_TRANSFER: on_transfer(window); return 0;
-    case ID_RECEIPT: on_receipt(window); return 0;
-    case ID_VIEW:
-      g_payment_view = !g_payment_view;
+    }
+    case WM_COMMAND:
+      switch (LOWORD(wparam)) {
+        case ID_ALGORITHM:
+          if (HIWORD(wparam) == CBN_DROPDOWN || HIWORD(wparam) == CBN_CLOSEUP) {
+            g_picker_open = HIWORD(wparam) == CBN_DROPDOWN;
+            if (g_picker_open) g_picker_initial = g_selected_algorithm;
+            InvalidateRect(g_algorithm_picker, NULL, FALSE);
+          }
+          if (HIWORD(wparam) == CBN_SELENDCANCEL && g_state == DEMO_READY) {
+            size_t index;
+            g_selected_algorithm = g_picker_initial;
+            for (index = 0; index < crypto_algorithm_count(); ++index) {
+              if (crypto_algorithm_at(index)->id == g_selected_algorithm) {
+                SendMessageA(g_algorithm_picker, CB_SETCURSEL, index, 0);
+                break;
+              }
+            }
+            InvalidateRect(window, NULL, FALSE);
+          }
+          if (HIWORD(wparam) == CBN_SELCHANGE && g_state == DEMO_READY) {
+            LRESULT row = SendMessageA(g_algorithm_picker, CB_GETCURSEL, 0, 0);
+            CryptoAlgorithm selected =
+                (CryptoAlgorithm)SendMessageA(g_algorithm_picker, CB_GETITEMDATA, (WPARAM)row, 0);
+            if (crypto_algorithm_info(selected) != NULL) g_selected_algorithm = selected;
+            InvalidateRect(g_algorithm_picker, NULL, FALSE);
+            InvalidateRect(window, NULL, FALSE);
+          }
+          return 0;
+        case ID_RUN:
+          on_run(window);
+          return 0;
+        case ID_RESTORE:
+          on_restore(window);
+          return 0;
+        case ID_NOTE:
+          on_note(window);
+          return 0;
+        case ID_TRANSFER:
+          on_transfer(window);
+          return 0;
+        case ID_RECEIPT:
+          on_receipt(window);
+          return 0;
+        case ID_VIEW:
+          g_payment_view = !g_payment_view;
+          update_buttons();
+          InvalidateRect(window, NULL, FALSE);
+          return 0;
+      }
+      break;
+    case WM_MEASUREITEM:
+      if (wparam == ID_ALGORITHM) {
+        MEASUREITEMSTRUCT *item = (MEASUREITEMSTRUCT *)lparam;
+        item->itemHeight = 60;
+        return TRUE;
+      }
+      break;
+    case WM_CTLCOLORLISTBOX:
+      SetTextColor((HDC)wparam, COLOR_TEXT);
+      SetBkColor((HDC)wparam, COLOR_PANEL);
+      return (LRESULT)g_picker_brush;
+    case WM_DRAWITEM:
+      if (wparam == ID_ALGORITHM) {
+        draw_algorithm_option((const DRAWITEMSTRUCT *)lparam);
+        return TRUE;
+      }
+      if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE || wparam == ID_TRANSFER ||
+          wparam == ID_RECEIPT || wparam == ID_VIEW) {
+        draw_button((const DRAWITEMSTRUCT *)lparam);
+        return TRUE;
+      }
+      break;
+    case WM_TELEGRAM:
+      if (!payment_session_active(window)) return 0;
+      if (g_telegram_state != TELEGRAM_SENDING && g_telegram_state != TELEGRAM_WAITING) return 0;
+      g_telegram_state = (unsigned int)wparam;
+      if (wparam == TELEGRAM_WAITING) {
+        add_log("Request delivered. Approve it in your Telegram chat.");
+      } else if (wparam == TELEGRAM_APPROVED) {
+        add_log("Telegram approval verified; demo receipt issued.");
+        InvalidateRect(window, NULL, FALSE);
+        UpdateWindow(window);
+        on_restore(window);
+        if (g_state == DEMO_RESTORED) on_receipt(window);
+      } else if (wparam == TELEGRAM_FAILED) {
+        add_log("Telegram failed. Retry is available; local restore works.");
+        show_message(window, telegram_error((unsigned long)lparam), "Meoware EDU - Telegram");
+      }
       update_buttons();
       InvalidateRect(window, NULL, FALSE);
       return 0;
-    }
-    break;
-  case WM_MEASUREITEM:
-    if (wparam == ID_ALGORITHM) {
-      MEASUREITEMSTRUCT *item = (MEASUREITEMSTRUCT *)lparam;
-      item->itemHeight = 60;
-      return TRUE;
-    }
-    break;
-  case WM_CTLCOLORLISTBOX:
-    SetTextColor((HDC)wparam, COLOR_TEXT);
-    SetBkColor((HDC)wparam, COLOR_PANEL);
-    return (LRESULT)g_picker_brush;
-  case WM_DRAWITEM:
-    if (wparam == ID_ALGORITHM) {
-      draw_algorithm_option((const DRAWITEMSTRUCT *)lparam);
-      return TRUE;
-    }
-    if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE ||
-        wparam == ID_TRANSFER || wparam == ID_RECEIPT || wparam == ID_VIEW) {
-      draw_button((const DRAWITEMSTRUCT *)lparam);
-      return TRUE;
-    }
-    break;
-  case WM_TELEGRAM:
-    if (!payment_session_active(window)) return 0;
-    if (g_telegram_state != TELEGRAM_SENDING && g_telegram_state != TELEGRAM_WAITING) return 0;
-    g_telegram_state = (unsigned int)wparam;
-    if (wparam == TELEGRAM_WAITING) {
-      add_log("Request delivered. Approve it in your Telegram chat.");
-    } else if (wparam == TELEGRAM_APPROVED) {
-      add_log("Telegram approval verified; demo receipt issued.");
-      InvalidateRect(window, NULL, FALSE);
-      UpdateWindow(window);
-      on_restore(window);
-      if (g_state == DEMO_RESTORED) on_receipt(window);
-    } else if (wparam == TELEGRAM_FAILED) {
-      add_log("Telegram failed. Retry is available; local restore works.");
-      show_message(window, telegram_error((unsigned long)lparam), "Meoware EDU - Telegram");
-    }
-    update_buttons();
-    InvalidateRect(window, NULL, FALSE);
-    return 0;
-  case WM_TIMER:
-    if (wparam == ID_TIMER && g_timer_running) {
-      if (GetTickCount64() >= g_deadline) on_deadline(window);
-      else {
-        InvalidateRect(window, NULL, FALSE);
+    case WM_TIMER:
+      if (wparam == ID_TIMER && g_timer_running) {
+        if (GetTickCount64() >= g_deadline)
+          on_deadline(window);
+        else {
+          InvalidateRect(window, NULL, FALSE);
+        }
+        return 0;
       }
+      break;
+    case WM_PAINT: {
+      PAINTSTRUCT paint;
+      HDC dc = BeginPaint(window, &paint);
+      RECT client;
+      HDC buffer = CreateCompatibleDC(dc);
+      HBITMAP bitmap;
+      GetClientRect(window, &client);
+      bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
+      if (buffer != NULL && bitmap != NULL) {
+        HGDIOBJ previous = SelectObject(buffer, bitmap);
+        draw_dashboard(window, buffer);
+        BitBlt(dc, 0, 0, client.right, client.bottom, buffer, 0, 0, SRCCOPY);
+        SelectObject(buffer, previous);
+      } else {
+        draw_dashboard(window, dc);
+      }
+      if (bitmap != NULL) DeleteObject(bitmap);
+      if (buffer != NULL) DeleteDC(buffer);
+      EndPaint(window, &paint);
       return 0;
     }
-    break;
-  case WM_PAINT: {
-    PAINTSTRUCT paint;
-    HDC dc = BeginPaint(window, &paint);
-    RECT client;
-    HDC buffer = CreateCompatibleDC(dc);
-    HBITMAP bitmap;
-    GetClientRect(window, &client);
-    bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
-    if (buffer != NULL && bitmap != NULL) {
-      HGDIOBJ previous = SelectObject(buffer, bitmap);
-      draw_dashboard(window, buffer);
-      BitBlt(dc, 0, 0, client.right, client.bottom, buffer, 0, 0, SRCCOPY);
-      SelectObject(buffer, previous);
-    } else {
-      draw_dashboard(window, dc);
-    }
-    if (bitmap != NULL) DeleteObject(bitmap);
-    if (buffer != NULL) DeleteDC(buffer);
-    EndPaint(window, &paint);
-    return 0;
-  }
-  case WM_ERASEBKGND:
-    return 1;
-  case WM_DESTROY:
-    telegram_cancel();
-    if (g_timer_running) KillTimer(window, ID_TIMER);
-    lab_close(&g_lab);
-    if (g_font_title != NULL) DeleteObject(g_font_title);
-    if (g_font_countdown != NULL) DeleteObject(g_font_countdown);
-    if (g_font_heading != NULL) DeleteObject(g_font_heading);
-    if (g_font_body != NULL) DeleteObject(g_font_body);
-    if (g_font_small != NULL) DeleteObject(g_font_small);
-    if (g_font_mono != NULL) DeleteObject(g_font_mono);
-    if (g_picker_brush != NULL) DeleteObject(g_picker_brush);
-    PostQuitMessage(0);
-    return 0;
+    case WM_ERASEBKGND:
+      return 1;
+    case WM_DESTROY:
+      telegram_cancel();
+      if (g_timer_running) KillTimer(window, ID_TIMER);
+      lab_close(&g_lab);
+      if (g_font_title != NULL) DeleteObject(g_font_title);
+      if (g_font_countdown != NULL) DeleteObject(g_font_countdown);
+      if (g_font_heading != NULL) DeleteObject(g_font_heading);
+      if (g_font_body != NULL) DeleteObject(g_font_body);
+      if (g_font_small != NULL) DeleteObject(g_font_small);
+      if (g_font_mono != NULL) DeleteObject(g_font_mono);
+      if (g_picker_brush != NULL) DeleteObject(g_picker_brush);
+      PostQuitMessage(0);
+      return 0;
   }
   return DefWindowProcA(window, message, wparam, lparam);
 }
@@ -969,7 +1017,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
   WNDCLASSEXA window_class;
   HWND window;
   MSG message;
-  RECT window_rect = { 0, 0, 1080, 706 };
+  RECT window_rect = {0, 0, 1080, 706};
   DWORD window_style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
 
   (void)previous;
@@ -986,20 +1034,20 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
   window_class.lpfnWndProc = window_proc;
   window_class.hInstance = instance;
   window_class.hCursor = LoadCursorA(NULL, IDC_ARROW);
-  window_class.hIcon = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE),
-    IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
-  window_class.hIconSm = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE),
-    IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
+  window_class.hIcon =
+      (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE), IMAGE_ICON,
+                        GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED);
+  window_class.hIconSm =
+      (HICON)LoadImageA(instance, MAKEINTRESOURCEA(IDI_MEOWARE), IMAGE_ICON,
+                        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED);
   window_class.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
   window_class.lpszClassName = WINDOW_CLASS;
   if (!RegisterClassExA(&window_class)) return 1;
 
   AdjustWindowRectEx(&window_rect, window_style, FALSE, 0);
-  window = CreateWindowExA(0, WINDOW_CLASS, "Meoware EDU - Behavior Lab",
-               window_style,
-               CW_USEDEFAULT, CW_USEDEFAULT,
-               window_rect.right - window_rect.left, window_rect.bottom - window_rect.top,
-               NULL, NULL, instance, NULL);
+  window = CreateWindowExA(0, WINDOW_CLASS, "Meoware EDU - Behavior Lab", window_style,
+                           CW_USEDEFAULT, CW_USEDEFAULT, window_rect.right - window_rect.left,
+                           window_rect.bottom - window_rect.top, NULL, NULL, instance, NULL);
   if (window == NULL) return 1;
   ShowWindow(window, show_command);
   UpdateWindow(window);
