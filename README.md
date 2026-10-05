@@ -71,7 +71,7 @@ The build does not require Visual Studio or MFC. The sample assets are packed in
 
 ## Payment simulation
 
-The payment flow is a Telegram-mediated demo, not a local confirmation counter. The Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.    
+The payment flow is a Telegram-mediated demo, with confirmation. The Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.    
 
 ![img](./screenshots/8.png)    
 
@@ -96,5 +96,7 @@ Run the portable receipt, TEA, and XTEA tests with a host C compiler (no Windows
 ```bash
 make test
 ```
+
+![img](./screenshots/10.png)    
 
 Build the Windows integration tests with `make windows-test-build`. Run the resulting `/tmp/meoware-lab-tests.exe` on Windows or under Wine to check AES, TEA, and XTEA through the actual lab workflow, including cipher dispatch, header validation, restoration against embedded resources, and the deadline branch. The tests create their own temporary labs and remove them after successful checks.
