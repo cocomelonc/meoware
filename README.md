@@ -31,6 +31,7 @@ Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is t
 | Skipjack-80-CBC | 80 bits | 64 bits | 32 rounds, alternating A/B rules, big-endian words ([blog #20](https://cocomelonc.github.io/malware/2023/08/28/malware-cryptography-20.html)) |
 | Camellia-128-CBC | 128 bits | 128 bits | 18 rounds, FL/FLINV layers, big-endian words; RFC 3713 ([blog #38](https://cocomelonc.github.io/malware/2024/12/29/malware-cryptography-38.html)) |
 | Speck-128-CBC | 128 bits | 128 bits | Speck128/128, 32 rounds, ARX operations, reference little-endian byte/word order ([blog #42](https://cocomelonc.github.io/malware/2025/05/29/malware-cryptography-42.html)) |
+| MARS-128-CBC | 128 bits | 128 bits | IBM MARS with 128-bit key profile, full key expansion and 32-round structure ([blog #43](https://cocomelonc.github.io/malware/2025/07/16/malware-cryptography-43.html); implementation follows the [IBM specification and vectors](https://shaih.github.io/pubs/mars/index.html)) |
 
 All block cipher modes use `PKCS#7` padding, a fresh random session key, and a fresh IV per sample. TEA and XTEA have separate block implementations and share CBC/padding handling in `src/cbc64.c`. This is a teaching lab: the CBC records do not provide authenticated encryption.      
 

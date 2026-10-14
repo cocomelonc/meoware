@@ -15,6 +15,7 @@ _Static_assert(A51_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit A5/1
 _Static_assert(SKIPJACK_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Skipjack");
 _Static_assert(CAMELLIA_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Camellia");
 _Static_assert(SPECK_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Speck");
+_Static_assert(MARS_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit MARS");
 
 static const CryptoInfo algorithms[] = {
     {CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE, AES_BLOCK_SIZE},
@@ -27,7 +28,8 @@ static const CryptoInfo algorithms[] = {
      SKIPJACK_BLOCK_SIZE},
     {CRYPTO_CAMELLIA128_CBC, "Camellia-128-CBC", CAMELLIA_KEY_SIZE, CAMELLIA_BLOCK_SIZE,
      CAMELLIA_BLOCK_SIZE},
-    {CRYPTO_SPECK128_CBC, "Speck-128-CBC", SPECK_KEY_SIZE, SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE}};
+    {CRYPTO_SPECK128_CBC, "Speck-128-CBC", SPECK_KEY_SIZE, SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE},
+    {CRYPTO_MARS128_CBC, "MARS-128-CBC", MARS_KEY_SIZE, MARS_BLOCK_SIZE, MARS_BLOCK_SIZE}};
 
 size_t crypto_algorithm_count(void) {
   return sizeof(algorithms) / sizeof(algorithms[0]);
@@ -170,6 +172,9 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
       break;
     case CRYPTO_SPECK128_CBC:
       transform = encrypt ? speck_encrypt_block : speck_decrypt_block;
+      break;
+    case CRYPTO_MARS128_CBC:
+      transform = encrypt ? mars_encrypt_block : mars_decrypt_block;
       break;
     default:
       break;
