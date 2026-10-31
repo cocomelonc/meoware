@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "smoke-v1",
+  "groups": [
+    {"id":"notes","format":"txt","directory":"Documents","count":6,"content_bytes":[0,1,15,16,65536,65537],"content":"text"},
+    {"id":"reports","format":"pdf","directory":"Documents/Reports","count":2,"content_bytes":[128,4096],"content":"text"},
+    {"id":"letters","format":"docx","directory":"Documents/Letters","count":2,"copies":2,"content_bytes":[512,8192],"content":"text"},
+    {"id":"tables","format":"csv","directory":"Documents/Tables","count":2,"content_bytes":[1024,8192],"content":"text"},
+    {"id":"records","format":"json","directory":"Projects/Data","count":2,"content_bytes":[1024,8192],"content":"text"},
+    {"id":"images","format":"png","directory":"Pictures","count":2,"content_bytes":[4096,65536],"content":"random"},
+    {"id":"audio","format":"wav","directory":"Media","count":2,"content_bytes":[32000,131073],"content":"random"},
+    {"id":"archives","format":"zip","directory":"Archives","count":2,"content_bytes":[8192,131073],"content":"mixed"},
+    {"id":"controls","format":"bin","directory":"Controls","count":2,"content_bytes":[16,65537],"content":"zeros"}
+  ]
+}

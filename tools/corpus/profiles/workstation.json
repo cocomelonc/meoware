@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "workstation-v1",
+  "groups": [
+    {"id":"notes","format":"txt","directory":"Documents/Notes","count":100,"content_bytes":{"min":64,"max":32768},"content":"text"},
+    {"id":"templates","format":"txt","directory":"Documents/Templates","count":10,"copies":3,"content_bytes":[1024,4096],"content":"repeat","text":"Meow-meow! Monthly laboratory report. "},
+    {"id":"reports","format":"pdf","directory":"Documents/Reports","count":50,"content_bytes":{"min":1024,"max":65536},"content":"text"},
+    {"id":"letters","format":"docx","directory":"Documents/Letters","count":50,"content_bytes":{"min":1024,"max":65536},"content":"text"},
+    {"id":"tables","format":"csv","directory":"Documents/Tables","count":30,"content_bytes":{"min":4096,"max":131072},"content":"text"},
+    {"id":"records","format":"json","directory":"Projects/Data","count":30,"content_bytes":{"min":1024,"max":65536},"content":"text"},
+    {"id":"images-noise","format":"png","directory":"Pictures/Noise","count":20,"content_bytes":{"min":49152,"max":786432},"content":"random"},
+    {"id":"images-flat","format":"png","directory":"Pictures/Flat","count":20,"content_bytes":[49152,196608,786432],"content":"zeros"},
+    {"id":"audio","format":"wav","directory":"Media","count":10,"content_bytes":{"min":32000,"max":1048576},"content":"random"},
+    {"id":"archives-text","format":"zip","directory":"Archives","count":10,"content_bytes":{"min":65536,"max":524288},"content":"text"},
+    {"id":"archives-noise","format":"zip","directory":"Archives","count":10,"content_bytes":{"min":65536,"max":524288},"content":"random"},
+    {"id":"boundary-controls","format":"bin","directory":"Controls","count":12,"content_bytes":[0,1,7,8,15,16,17,65535,65536,65537,131071,131073],"content":"random"}
+  ]
+}

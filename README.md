@@ -10,11 +10,27 @@ Meoware EDU is a standalone C/Win32 ransomware behavior lab for educational and 
 
 ![img](./screenshots/1.png)    
 
-The lab directory is created under the current user's Windows temporary directory and is shown in the GUI. Use **Open lab folder** to copy in disposable generated fixtures. The application processes only files under this private lab path; it does not accept arbitrary target paths or enumerate drives. Symbolic links and junctions are rejected. The application does not register file associations or touch the registry. Its payment demo uses the Telegram Bot API to exchange a fictional meowcoins request and operator-approved demo receipt; no real payment is requested or verified.
+The lab directory is created under the current user's Windows temporary directory and is shown in the GUI. Use *Open lab folder* to copy in disposable generated fixtures. The application processes only files under this private lab path; it does not accept arbitrary target paths or enumerate drives. Symbolic links and junctions are rejected. The application does not register file associations or touch the registry. Its payment demo uses the Telegram Bot API to exchange a fictional meowcoins request and operator-approved demo receipt; no real payment is requested or verified.
 
-The lab no longer embeds or assumes a fixed sample list. The corpus can be generated separately and copied into the displayed lab folder. The C implementation separates the Win32 UI, lab workflow, cipher dispatch, portable cipher modules, and receipt flow. AES, random key/IV generation, and HMAC-SHA-256 use Windows CNG.
+Early versions of my lab embeds or assumes a fixed sample list.    
+Now uses a generated corpus.    
+The corpus can be generated separately and copied into the displayed lab folder. The C implementation separates the Win32 UI, lab workflow, cipher dispatch, portable cipher modules, and receipt flow. AES, random key/IV generation, and HMAC-SHA-256 use Windows CNG.
 
-## Algorithms
+## generate a corpus on Linux
+
+The standalone Python 3.10+ generator creates deterministic synthetic TXT, CSV, JSON, PDF, DOCX, PNG, WAV, ZIP, and binary fixtures using the standard library. Profiles, seeds, hashes, byte statistics, and duplicate lineage are stored outside the payload. Cipher implementations do not depend on the generator.
+
+```bash
+python3 -m tools.corpus plan --profile tools/corpus/profiles/smoke.json --seed 42
+python3 -m tools.corpus generate --profile tools/corpus/profiles/smoke.json --seed 42 --output datasets/corpora/smoke-42
+python3 -m tools.corpus verify --corpus datasets/corpora/smoke-42
+```
+
+Copy *only the contents of `datasets/corpora/smoke-42/payload/`* into the folder shown by *Open lab folder* in the Windows GUI. Keep `manifest.json` and `files.jsonl` outside that folder. After restoring, verify the returned payload with `verify --corpus datasets/corpora/smoke-42 --payload /path/to/restored/files`.     
+
+See [the corpus documentation](tools/corpus/README.md) for custom profiles, budgets, format extensions, statistical definitions, and ML evaluation limits. A portable [agent skill](skills/meoware-corpus/SKILL.md) describes the same CLI workflow. Generated corpora are ignored by Git. These fixtures support controlled experiments; they are not labeled telemetry or proof of model performance.
+
+## algorithms
 
 Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is the default. The selection locks when the session starts; direct restoration and mock-payment restoration both use that session's cipher and key. Restart the application to try another algorithm in a fresh lab.     
 
@@ -71,7 +87,7 @@ The build does not require Visual Studio or MFC. It embeds no corpus files; the 
 
 `Run demo` first enumerates the complete tree and rejects reparse points, excessive nesting, path overflow, and existing output collisions. It streams each file into a temporary authenticated record while keeping every source in place. Only after all records are staged and committed does it remove source copies. If a later removal fails, the session keeps the recovery manifest and enables `Restore lab`; restore handles both files already removed and source/output pairs left by a partial run. Restore writes to temporary files, checks HMAC and original length, then restores the original relative paths and basic timestamps. The deadline branch removes only session records. The lab directory is left in the temp folder for inspection.
 
-## Payment simulation
+## payment simulation
 
 The payment flow is a Telegram-mediated demo, with confirmation. The Windows GUI calls Telegram's Bot API directly with WinHTTP. Configure a dedicated test bot and private `chat_id` in `bot/config.json`, then rebuild with `make`; the bot token is embedded in the resulting executable, so use test credentials only. Start the bot chat with `/start` before running the demo.    
 
