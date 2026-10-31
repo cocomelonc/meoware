@@ -48,8 +48,11 @@ Choose an algorithm in the `ALGORITHM` list before clicking `Run demo`. AES is t
 | Camellia-128-CBC | 128 bits | 128 bits | 18 rounds, FL/FLINV layers, big-endian words; RFC 3713 ([blog #38](https://cocomelonc.github.io/malware/2024/12/29/malware-cryptography-38.html)) |
 | Speck-128-CBC | 128 bits | 128 bits | Speck128/128, 32 rounds, ARX operations, reference little-endian byte/word order ([blog #42](https://cocomelonc.github.io/malware/2025/05/29/malware-cryptography-42.html)) |
 | MARS-128-CBC | 128 bits | 128 bits | IBM MARS with 128-bit key profile, full key expansion and 32-round structure ([blog #43](https://cocomelonc.github.io/malware/2025/07/16/malware-cryptography-43.html); implementation follows the [IBM specification and vectors](https://shaih.github.io/pubs/mars/index.html)) |
+| SAFER-K64-CBC | 64 bits | 64 bits | Original SAFER K-64, six rounds, unstrengthened key schedule; byte substitutions and Pseudo-Hadamard diffusion ([blog #26](https://cocomelonc.github.io/malware/2024/04/09/malware-cryptography-26.html)) |
 
 All block cipher modes use `PKCS#7` padding, a fresh random session key, and a fresh IV per file. Streaming CBC state is maintained across fixed-size reads. Each MWA3 record is authenticated with HMAC-SHA-256 before restoration is committed. TEA and XTEA have separate block implementations and share CBC/padding handling in `src/cbc.c`. Cipher implementations remain educational; this lab is not a production file-encryption product.
+
+SAFER uses the original K-64 profile with an 8-byte key, 8-byte block, and six rounds. Its algorithm selection comes from blog #26; the article's two-word mixing example differs from SAFER's byte substitutions, Pseudo-Hadamard layers, and key expansion. This implementation follows the algorithm documented in [Richard De Moliner's reference maintained by LibTomCrypt](https://github.com/libtom/libtomcrypt/blob/develop/src/ciphers/safer/safer.c). Tests cover the first four K-64/six-round [Crypto++ vectors](https://github.com/weidai11/cryptopp/blob/master/TestData/saferval.dat), whose profile is selected in `ValidateSAFER()` in [validat4.cpp](https://github.com/weidai11/cryptopp/blob/master/validat4.cpp), plus LibTomCrypt's independent K-64 example. The expanded key is prepared once per session, reused by streaming encryption and restoration, and cleared when the session closes. SAFER K-64 is a historical cipher with a 64-bit key, included for controlled educational experiments.
 
 For TEA: the algorithm selection follows the cryptography series in [my blog](https://cocomelonc.github.io/malware/2023/02/20/malware-av-evasion-12.html). The C snippet in that article uses XTEA-style mixing despite its TEA function names. This implementation follows [Wheeler and Needham's original TEA specification](https://www.cl.cam.ac.uk/ftp/papers/djw-rmn/djw-rmn-tea.html), with known-answer tests from [Crypto++'s TEA vectors](https://github.com/weidai11/cryptopp/blob/master/TestVectors/tea.txt). Other algorithms will be added separately.     
 
@@ -74,7 +77,7 @@ x86_64-w64-mingw32-windres -i src/assets.rc -O coff -o meoware-assets.o
 x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Wpedantic \
   -Iinclude -mwindows -o meoware.exe \
   src/main.c src/lab.c src/crypto.c src/tea.c src/xtea.c src/rc5.c src/rc6.c \
-  src/a51.c src/skipjack.c src/camellia.c src/speck.c src/mars.c src/cbc.c \
+  src/a51.c src/skipjack.c src/camellia.c src/speck.c src/mars.c src/safer.c src/cbc.c \
   src/telegram.c src/approval.c src/json.c meoware-assets.o \
   -lbcrypt -luser32 -lgdi32 -lwinhttp -lshell32
 ```
@@ -109,7 +112,7 @@ After approval, the bot sends a demo receipt to the chat and the GUI displays it
 
 The GUI is the only update consumer for this bot token: stop other polling clients and do not configure a webhook for it. An existing webhook or competing poller prevents the approval flow from working. No real money, wallet, or blockchain is involved; the amount and receipt are fictional. The request sends only the demo amount, a random session reference, and fixed demo text, not encryption keys, sample contents, paths, or machine information. `Restore lab` remains available for local recovery regardless of Telegram status.
 
-Run the portable receipt, TEA, and XTEA tests with a host C compiler (no Windows or Wine needed). These cover published cipher vectors, CBC chaining, padding rejection, buffer boundaries, in-place operations, and exact restoration of the five bundled samples:
+Run the portable cipher and receipt tests with a host C compiler (no Windows or Wine needed). These cover published cipher vectors, CBC chaining, padding rejection, buffer boundaries, in-place operations, sample round trips, and SAFER's prepared-key API:
 
 ```bash
 make test

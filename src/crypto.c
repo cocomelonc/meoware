@@ -16,6 +16,7 @@ _Static_assert(SKIPJACK_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit
 _Static_assert(CAMELLIA_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Camellia");
 _Static_assert(SPECK_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Speck");
 _Static_assert(MARS_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit MARS");
+_Static_assert(SAFER_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit SAFER");
 
 static const CryptoInfo algorithms[] = {
     {CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE, AES_BLOCK_SIZE},
@@ -29,7 +30,8 @@ static const CryptoInfo algorithms[] = {
     {CRYPTO_CAMELLIA128_CBC, "Camellia-128-CBC", CAMELLIA_KEY_SIZE, CAMELLIA_BLOCK_SIZE,
      CAMELLIA_BLOCK_SIZE},
     {CRYPTO_SPECK128_CBC, "Speck-128-CBC", SPECK_KEY_SIZE, SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE},
-    {CRYPTO_MARS128_CBC, "MARS-128-CBC", MARS_KEY_SIZE, MARS_BLOCK_SIZE, MARS_BLOCK_SIZE}};
+    {CRYPTO_MARS128_CBC, "MARS-128-CBC", MARS_KEY_SIZE, MARS_BLOCK_SIZE, MARS_BLOCK_SIZE},
+    {CRYPTO_SAFERK64_CBC, "SAFER-K64-CBC", SAFER_KEY_SIZE, SAFER_BLOCK_SIZE, SAFER_BLOCK_SIZE}};
 
 size_t crypto_algorithm_count(void) {
   return sizeof(algorithms) / sizeof(algorithms[0]);
@@ -67,6 +69,8 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   if (selected != CRYPTO_AES256_CBC) {
     if (!crypto_random(context->portable_key, crypto_algorithm_info(selected)->key_size))
       goto failure;
+    if (selected == CRYPTO_SAFERK64_CBC)
+      safer_expand_key(context->portable_key, context->safer_schedule);
     context->initialized = true;
     return true;
   }
@@ -135,6 +139,7 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
   unsigned char iv_copy[AES_BLOCK_SIZE];
   NTSTATUS status;
   CbcBlockTransform transform = NULL;
+  const unsigned char *transform_key;
 
   if (output_size != NULL) *output_size = 0;
   if (context == NULL || !context->initialized || iv == NULL ||
@@ -143,6 +148,7 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
     return false;
   }
 
+  transform_key = context->portable_key;
   switch (context->selected) {
     case CRYPTO_A51: {
       uint32_t frame = (uint32_t)iv[0] | ((uint32_t)iv[1] << 8) | ((uint32_t)iv[2] << 16);
@@ -176,15 +182,19 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
     case CRYPTO_MARS128_CBC:
       transform = encrypt ? mars_encrypt_block : mars_decrypt_block;
       break;
+    case CRYPTO_SAFERK64_CBC:
+      transform = encrypt ? safer_encrypt_prepared : safer_decrypt_prepared;
+      transform_key = context->safer_schedule;
+      break;
     default:
       break;
   }
   if (transform != NULL) {
     size_t written = 0;
     size_t block_size = crypto_algorithm_info(context->selected)->block_size;
-    bool success = encrypt ? cbc_encrypt(transform, block_size, context->portable_key, iv, input,
+    bool success = encrypt ? cbc_encrypt(transform, block_size, transform_key, iv, input,
                                          input_size, output, output_capacity, &written)
-                           : cbc_decrypt(transform, block_size, context->portable_key, iv, input,
+                           : cbc_decrypt(transform, block_size, transform_key, iv, input,
                                          input_size, output, output_capacity, &written);
     if (success) *output_size = (ULONG)written;
     return success;
@@ -223,12 +233,14 @@ bool crypto_decrypt(CryptoContext *context, const unsigned char iv[16], const un
 static bool crypto_transform_block(CryptoContext *context, bool encrypt,
                                    unsigned char block[CRYPTO_MAX_BLOCK_SIZE]) {
   CbcBlockTransform transform = NULL;
+  const unsigned char *transform_key;
   unsigned char result[CRYPTO_MAX_BLOCK_SIZE];
   unsigned char zero_iv[CRYPTO_MAX_BLOCK_SIZE] = {0};
   ULONG result_size = 0;
   NTSTATUS status;
 
   if (context == NULL || !context->initialized || block == NULL) return false;
+  transform_key = context->portable_key;
   switch (context->selected) {
     case CRYPTO_TEA128_CBC:
       transform = encrypt ? tea_encrypt_block : tea_decrypt_block;
@@ -254,6 +266,10 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
     case CRYPTO_MARS128_CBC:
       transform = encrypt ? mars_encrypt_block : mars_decrypt_block;
       break;
+    case CRYPTO_SAFERK64_CBC:
+      transform = encrypt ? safer_encrypt_prepared : safer_decrypt_prepared;
+      transform_key = context->safer_schedule;
+      break;
     case CRYPTO_AES256_CBC:
       if (context->key == NULL) return false;
       status = encrypt ? BCryptEncrypt(context->key, block, AES_BLOCK_SIZE, NULL, zero_iv,
@@ -273,7 +289,7 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
       return false;
   }
   if (transform == NULL) return false;
-  transform(block, context->portable_key);
+  transform(block, transform_key);
   return true;
 }
 

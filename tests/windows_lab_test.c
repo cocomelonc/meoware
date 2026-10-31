@@ -186,7 +186,11 @@ static void check_portable_dispatch(void) {
                 {0},
                 {0},
                 {0xdc, 0xc0, 0x7b, 0x8d, 0xfb, 0x07, 0x38, 0xd6, 0xe3, 0x0a, 0x22, 0xdf, 0xcf, 0x27,
-                 0xe8, 0x86}}};
+                 0xe8, 0x86}},
+               {CRYPTO_SAFERK64_CBC,
+                {8, 7, 6, 5, 4, 3, 2, 1},
+                {1, 2, 3, 4, 5, 6, 7, 8},
+                {0xc8, 0xf2, 0x9c, 0xdd, 0x87, 0x78, 0x3e, 0xd9}}};
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
     unsigned char iv[16] = {0}, encrypted[32], restored[32];
     ULONG block_size = crypto_algorithm_info(cases[i].algorithm)->block_size;
@@ -194,6 +198,8 @@ static void check_portable_dispatch(void) {
     ULONG encrypted_size, restored_size;
     assert(crypto_init(&context, cases[i].algorithm));
     memcpy(context.portable_key, cases[i].key, sizeof(cases[i].key));
+    if (cases[i].algorithm == CRYPTO_SAFERK64_CBC)
+      safer_expand_key(context.portable_key, context.safer_schedule);
     assert(crypto_encrypt(&context, iv, cases[i].plain, block_size, encrypted, sizeof(encrypted),
                           &encrypted_size));
     assert(encrypted_size == 2 * block_size &&
@@ -201,7 +207,37 @@ static void check_portable_dispatch(void) {
     assert(crypto_decrypt(&context, iv, encrypted, encrypted_size, restored, sizeof(restored),
                           &restored_size));
     assert(restored_size == block_size && memcmp(restored, cases[i].plain, block_size) == 0);
+    /* Exercise the separately dispatched streaming path with split blocks. */
+    {
+      CryptoStream stream;
+      unsigned char chunked[32];
+      ULONG part, offset = 0;
+      assert(crypto_stream_init(&stream, &context, true, iv));
+      assert(crypto_stream_update(&stream, cases[i].plain, 1, chunked, sizeof(chunked), &part));
+      offset += part;
+      assert(crypto_stream_update(&stream, cases[i].plain + 1, block_size - 1,
+                                  chunked + offset, sizeof(chunked) - offset, &part));
+      offset += part;
+      assert(crypto_stream_final(&stream, chunked + offset, sizeof(chunked) - offset, &part));
+      offset += part;
+      assert(offset == encrypted_size && memcmp(chunked, encrypted, offset) == 0);
+      crypto_stream_close(&stream);
+
+      assert(crypto_stream_init(&stream, &context, false, iv));
+      offset = 0;
+      for (ULONG byte = 0; byte < encrypted_size; ++byte) {
+        assert(crypto_stream_update(&stream, encrypted + byte, 1, chunked + offset,
+                                    sizeof(chunked) - offset, &part));
+        offset += part;
+      }
+      assert(crypto_stream_final(&stream, chunked + offset, sizeof(chunked) - offset, &part));
+      offset += part;
+      assert(offset == block_size && memcmp(chunked, cases[i].plain, offset) == 0);
+      crypto_stream_close(&stream);
+    }
     crypto_close(&context);
+    for (size_t byte = 0; byte < sizeof(context.safer_schedule); ++byte)
+      assert(context.safer_schedule[byte] == 0);
   }
 }
 
