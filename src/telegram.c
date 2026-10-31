@@ -167,7 +167,7 @@ static DWORD WINAPI run(void *parameter) {
   snprintf(
       caption, sizeof(caption),
       "MEOWCOINS - DEMO PAYMENT REQUEST\n=^..^=\n\n"
-      "Reference: %s\nAmount: 25 meowcoins\n\nApprove this simulation to restore the five lab samples.",
+      "Reference: %s\nAmount: 25 meowcoins\n\nApprove this simulation to restore the lab files.",
       bot->reference);
   snprintf(keyboard, sizeof(keyboard),
            "{\"inline_keyboard\":[[{\"text\":\"Payment: OK - send receipt\","

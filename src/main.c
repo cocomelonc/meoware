@@ -1,6 +1,7 @@
 /* author: cocomelonc */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,14 +16,13 @@
 #define ID_RECEIPT 1005
 #define ID_VIEW 1006
 #define ID_ALGORITHM 1007
+#define ID_OPEN_LAB 1008
 #define ID_TIMER 1
 #define COUNTDOWN_SECONDS (24UL * 60UL * 60UL)
 #define LOG_CAPACITY 6
 #define DEMO_MEOWCOINS 25U
 
 static const char *WINDOW_CLASS = "MeowareEduWindow";
-static const char *sample_names[LAB_SAMPLE_COUNT] = {"sample1.txt", "sample2.txt", "sample3.txt",
-                                                     "sample4.txt", "sample5.txt"};
 
 typedef enum { DEMO_READY, DEMO_RUNNING, DEMO_RESTORED, DEMO_EXPIRED, DEMO_ERROR } DemoState;
 
@@ -38,6 +38,7 @@ static HWND g_note_button;
 static HWND g_transfer_button;
 static HWND g_receipt_button;
 static HWND g_view_button;
+static HWND g_open_lab_button;
 static HWND g_algorithm_picker;
 static WNDPROC g_picker_proc;
 static WNDPROC g_picker_list_proc;
@@ -116,11 +117,11 @@ static COLORREF state_tint(void) {
 static const char *state_text(void) {
   switch (g_state) {
     case DEMO_RUNNING:
-      return "ENCRYPTED - RESTORE AVAILABLE";
+      return "LAB ACTIVE - RESTORE AVAILABLE";
     case DEMO_RESTORED:
       return "RESTORED - LAB COMPLETE";
     case DEMO_EXPIRED:
-      return "DEADLINE - DEMO FILES REMOVED";
+      return "DEADLINE - LAB OUTPUTS REMOVED";
     case DEMO_ERROR:
       return "LAB INITIALIZATION ERROR";
     default:
@@ -157,7 +158,11 @@ static int show_message(HWND window, const char *message, const char *title) {
 
 static void show_error(HWND window, const char *message) {
   telegram_cancel();
-  g_state = DEMO_ERROR;
+  if (g_lab.encrypted) {
+    g_state = DEMO_RUNNING;
+  } else {
+    g_state = DEMO_ERROR;
+  }
   update_buttons();
   add_log("An operation failed; review the message.");
   InvalidateRect(window, NULL, FALSE);
@@ -166,6 +171,8 @@ static void show_error(HWND window, const char *message) {
 
 static void update_buttons(void) {
   EnableWindow(g_algorithm_picker, g_lab_ready && g_state == DEMO_READY);
+  if (g_open_lab_button != NULL)
+    EnableWindow(g_open_lab_button, g_lab_ready && g_state == DEMO_READY);
   if (g_run_button != NULL) {
     EnableWindow(g_run_button, g_lab_ready && g_state == DEMO_READY);
   }
@@ -196,8 +203,20 @@ static void on_run(HWND window) {
   char event[160];
 
   if (!g_lab_ready || g_state != DEMO_READY) return;
-  if (!lab_encrypt_samples(&g_lab, g_selected_algorithm, error, sizeof(error))) {
-    show_error(window, error);
+  if (!lab_encrypt_tree(&g_lab, g_selected_algorithm, error, sizeof(error))) {
+    if (g_lab.encrypted) {
+      g_started = GetTickCount64();
+      g_deadline = g_started + (ULONGLONG)COUNTDOWN_SECONDS * 1000;
+      g_timer_running = true;
+      g_state = DEMO_RUNNING;
+      SetTimer(window, ID_TIMER, 1000, NULL);
+      show_error(window, error);
+    } else {
+      add_log("Lab run did not start; the corpus can be corrected and retried.");
+      update_buttons();
+      InvalidateRect(window, NULL, FALSE);
+      show_message(window, error, "Meoware EDU - lab folder");
+    }
     return;
   }
   g_started = GetTickCount64();
@@ -206,10 +225,10 @@ static void on_run(HWND window) {
   g_state = DEMO_RUNNING;
   SetTimer(window, ID_TIMER, 1000, NULL);
   update_buttons();
-  snprintf(event, sizeof(event), "Five samples encrypted with %s.",
+  snprintf(event, sizeof(event), "%zu corpus files processed with %s.", g_lab.file_count,
            crypto_algorithm_info(g_lab.crypto.selected)->name);
   add_log(event);
-  add_log("Encrypted copies use the .meoware extension.");
+  add_log("Only files inside the private lab folder were processed.");
   InvalidateRect(window, NULL, FALSE);
 }
 
@@ -217,11 +236,11 @@ static void on_restore(HWND window) {
   char error[256];
 
   if (!g_lab_ready || g_state != DEMO_RUNNING) return;
-  if (GetTickCount64() >= g_deadline) {
+  if (g_timer_running && GetTickCount64() >= g_deadline) {
     on_deadline(window);
     return;
   }
-  if (!lab_restore_samples(&g_lab, error, sizeof(error))) {
+  if (!lab_restore_tree(&g_lab, error, sizeof(error))) {
     show_error(window, error);
     return;
   }
@@ -232,7 +251,7 @@ static void on_restore(HWND window) {
   g_state = DEMO_RESTORED;
   telegram_cancel();
   update_buttons();
-  add_log("All five samples restored using the session key.");
+  add_log("The authenticated lab records were restored.");
   InvalidateRect(window, NULL, FALSE);
 }
 
@@ -240,9 +259,9 @@ static void on_note(HWND window) {
   show_message(
       window,
       "EDUCATIONAL RANSOMWARE BEHAVIOR LAB\r\n\r\n"
-      "This demonstration encrypts five bundled sample files inside its own private CryptPath folder.\r\n\r\n"
-      "Payment demo uses 25 fictional meowcoins. Simulate transfer sends a Telegram request. The configured operator presses Payment: OK - send receipt; the GUI displays a demo receipt and restores the samples. No real money or blockchain is involved.\r\n\r\n"
-      "Restore samples also recovers the files directly. The deadline scenario affects only these generated demo files.",
+      "This demonstration processes regular files recursively inside its private lab folder. Copy only disposable generated corpus files into that folder. Symbolic links and junctions are rejected.\r\n\r\n"
+      "Payment demo uses 25 fictional meowcoins. Simulate transfer sends a Telegram request. The configured operator presses Payment: OK - send receipt; the GUI displays a demo receipt and restores the lab files. No real money or blockchain is involved.\r\n\r\n"
+      "Restore lab also recovers the files directly. The deadline scenario affects only encrypted outputs created in this lab session.",
       "Meoware EDU - demonstration note");
 }
 
@@ -252,14 +271,14 @@ static void on_deadline(HWND window) {
   telegram_cancel();
   KillTimer(window, ID_TIMER);
   g_timer_running = false;
-  if (lab_expire_samples(&g_lab, error, sizeof(error))) {
+  if (lab_expire_tree(&g_lab, error, sizeof(error))) {
     g_state = DEMO_EXPIRED;
     update_buttons();
-    add_log("Deadline reached; generated encrypted samples removed.");
+    add_log("Deadline reached; this session's encrypted records were removed.");
     InvalidateRect(window, NULL, FALSE);
     show_message(
         window,
-        "The deadline scenario removed only the five sample files generated in this lab folder.",
+        "The deadline scenario removed only encrypted records created in this lab folder. Any original copies left after an interrupted run remain in place.",
         "Meoware EDU - deadline");
   } else {
     show_error(window, error);
@@ -268,7 +287,7 @@ static void on_deadline(HWND window) {
 
 static bool payment_session_active(HWND window) {
   if (!g_lab_ready || g_state != DEMO_RUNNING) return false;
-  if (GetTickCount64() >= g_deadline) {
+  if (g_timer_running && GetTickCount64() >= g_deadline) {
     on_deadline(window);
     return false;
   }
@@ -303,7 +322,7 @@ static void on_receipt(HWND window) {
         g_telegram_state == TELEGRAM_IDLE
             ? "Click Simulate transfer to send a request to your Telegram chat."
         : g_telegram_state == TELEGRAM_FAILED
-            ? "Delivery failed. Click Retry transfer or restore the samples locally."
+            ? "Delivery failed. Click Retry transfer or restore the lab files locally."
             : "In Telegram, press Payment: OK - send receipt on the current request. Keep this GUI open.");
   }
   show_message(window, message, "Meoware EDU - demo receipt");
@@ -394,7 +413,7 @@ static void draw_payment(HDC dc, int x) {
         hint = "Send a demo request to your Telegram chat.";
         break;
       case TELEGRAM_APPROVED:
-        hint = "Operator approved. Restoring lab samples.";
+        hint = "Operator approved. Restoring lab files.";
         break;
       case TELEGRAM_FAILED:
         hint = "Telegram delivery failed. Retry or restore locally.";
@@ -405,7 +424,7 @@ static void draw_payment(HDC dc, int x) {
     }
   } else {
     hint = g_state == DEMO_READY      ? "Run demo to start the payment scenario."
-           : g_state == DEMO_RESTORED ? "Samples restored / session complete."
+           : g_state == DEMO_RESTORED ? "Lab files restored / session complete."
                                       : "Session closed / transfers unavailable.";
   }
   draw_text(dc, "PAYMENT DEMO", x + 22, 369, 456, 23, COLOR_TEXT, g_font_heading,
@@ -518,8 +537,12 @@ static void draw_dashboard(HWND window, HDC dc) {
             DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   draw_text(dc, "Scope", right_x + 23, 193, 60, 18, COLOR_MUTED, g_font_small,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "5 samples / private folder / demo", right_x + 85, 193, 392, 18, COLOR_TEXT,
-            g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  if (g_lab.file_count != 0)
+    snprintf(path_text, sizeof(path_text), "%zu files / private recursive folder", g_lab.file_count);
+  else
+    snprintf(path_text, sizeof(path_text), "Recursive corpus / private folder / demo");
+  draw_text(dc, path_text, right_x + 85, 193, 392, 18, COLOR_TEXT, g_font_small,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   if (algorithm->block_size)
     snprintf(algorithm_text, sizeof(algorithm_text), "%s / key %u-bit / block %u-bit",
              algorithm->name, algorithm->key_size * 8, algorithm->block_size * 8);
@@ -531,38 +554,24 @@ static void draw_dashboard(HWND window, HDC dc) {
   draw_text(dc, "ALGORITHM", 790, 267, 262, 17, COLOR_MUTED, g_font_small, DT_LEFT | DT_SINGLELINE);
 
   draw_card(dc, left_x, 351, card_width, 277);
-  draw_text(dc, "SAMPLE FILES", left_x + 22, 369, card_width - 44, 23, COLOR_TEXT, g_font_heading,
+  draw_text(dc, "LAB CORPUS", left_x + 22, 369, card_width - 44, 23, COLOR_TEXT, g_font_heading,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  draw_text(dc, "Bundled educational sample files", left_x + 22, 394, card_width - 44, 18,
+  draw_text(dc, "Copy disposable generated fixtures into the private folder below.", left_x + 22,
+            394, card_width - 44, 18,
             COLOR_MUTED, g_font_small, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-  for (i = 0; i < LAB_SAMPLE_COUNT; ++i) {
-    int row_y = 431 + i * 35;
-    COLORREF dot = COLOR_TEAL;
-    COLORREF tint = COLOR_MINT;
-    const char *status = "READY";
-    if (g_state == DEMO_RUNNING) {
-      dot = COLOR_RED;
-      tint = COLOR_ROSE;
-      status = "ENCRYPTED";
-    } else if (g_state == DEMO_RESTORED) {
-      dot = COLOR_ACCENT_DARK;
-      tint = COLOR_PANEL_ALT;
-      status = "RESTORED";
-    } else if (g_state == DEMO_EXPIRED) {
-      dot = COLOR_RED;
-      tint = COLOR_ROSE;
-      status = "REMOVED";
-    }
-    draw_status_dot(dc, left_x + 23, row_y + 6, dot);
-    draw_text(dc, sample_names[i], left_x + 43, row_y, 190, 22, COLOR_TEXT, g_font_mono,
-              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    fill_round_rect(dc, left_x + card_width - 119, row_y + 1, 91, 22, 11, tint, tint);
-    draw_text(dc, status, left_x + card_width - 115, row_y + 2, 83, 19, dot, g_font_small,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    if (i != LAB_SAMPLE_COUNT - 1) {
-      fill_rect(dc, left_x + 22, row_y + 29, card_width - 44, 1, COLOR_BORDER);
-    }
-  }
+  draw_status_dot(dc, left_x + 25, 441, g_lab.encrypted ? COLOR_RED : COLOR_TEAL);
+  snprintf(path_text, sizeof(path_text), "%zu files in this session", g_lab.file_count);
+  draw_text(dc, path_text, left_x + 45, 430, card_width - 80, 24, COLOR_TEXT, g_font_mono,
+            DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+  draw_text(dc, "All nested regular files are included; symbolic links and junctions stop the run.",
+            left_x + 22, 468, card_width - 44, 36, COLOR_MUTED, g_font_small,
+            DT_LEFT | DT_WORDBREAK);
+  draw_text(dc, "The simulator copies no files from outside this folder.", left_x + 22, 524,
+            card_width - 44, 30, COLOR_MUTED, g_font_small, DT_LEFT | DT_WORDBREAK);
+  draw_text(dc, g_state == DEMO_RUNNING ? "Restore is available while this process stays open."
+                                        : "Open the folder, place the corpus, then click Run demo.",
+            left_x + 22, 568, card_width - 44, 36, COLOR_ACCENT_DARK, g_font_small,
+            DT_LEFT | DT_WORDBREAK);
 
   draw_card(dc, right_x, 351, 500, 277);
   if (g_payment_view) {
@@ -586,7 +595,7 @@ static void draw_dashboard(HWND window, HDC dc) {
             DT_LEFT | DT_VCENTER | DT_SINGLELINE);
   snprintf(path_text, sizeof(path_text), "%s",
            g_lab_ready ? lab_directory(&g_lab) : "Lab folder unavailable");
-  draw_text(dc, path_text, 152, 655, client_width - 198, 18, COLOR_MUTED, g_font_mono,
+  draw_text(dc, path_text, 152, 655, client_width - 366, 18, COLOR_MUTED, g_font_mono,
             DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
 }
 
@@ -818,7 +827,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
           0, "BUTTON", "Run demo", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 28, 286, 160,
           44, window, (HMENU)(INT_PTR)ID_RUN, GetModuleHandleA(NULL), NULL);
       g_restore_button = CreateWindowExA(
-          0, "BUTTON", "Restore samples", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 200,
+          0, "BUTTON", "Restore lab", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 200,
           286, 200, 44, window, (HMENU)(INT_PTR)ID_RESTORE, GetModuleHandleA(NULL), NULL);
       g_note_button = CreateWindowExA(
           0, "BUTTON", "View note", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 412, 286,
@@ -832,6 +841,9 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       g_receipt_button = CreateWindowExA(
           0, "BUTTON", "Check receipt", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, 808, 571,
           222, 38, window, (HMENU)(INT_PTR)ID_RECEIPT, GetModuleHandleA(NULL), NULL);
+      g_open_lab_button = CreateWindowExA(
+          0, "BUTTON", "Open lab folder", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+          896, 646, 156, 36, window, (HMENU)(INT_PTR)ID_OPEN_LAB, GetModuleHandleA(NULL), NULL);
       g_algorithm_picker = CreateWindowExA(
           0, "COMBOBOX", "Algorithm",
           WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST | CBS_OWNERDRAWFIXED |
@@ -860,14 +872,15 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
       SetWindowLongPtrA(g_view_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
       SetWindowLongPtrA(g_transfer_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
       SetWindowLongPtrA(g_receipt_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
+      SetWindowLongPtrA(g_open_lab_button, GWLP_WNDPROC, (LONG_PTR)button_proc);
       EnableWindow(g_restore_button, FALSE);
       if (!lab_initialize(&g_lab, error, sizeof(error))) {
         show_error(window, error);
         add_log("Lab initialization failed.");
       } else {
         g_lab_ready = true;
-        add_log("Created isolated folder and five bundled samples.");
-        add_log("Ready - only these generated samples are in scope.");
+        add_log("Created an empty isolated corpus folder.");
+        add_log("Only files placed in the displayed lab path are in scope.");
       }
       update_buttons();
       return 0;
@@ -920,6 +933,13 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
           update_buttons();
           InvalidateRect(window, NULL, FALSE);
           return 0;
+        case ID_OPEN_LAB:
+          if (g_lab_ready && (INT_PTR)ShellExecuteA(window, "open", lab_directory(&g_lab), NULL,
+                                                    NULL, SW_SHOWNORMAL) <= 32) {
+            show_message(window, "Could not open the private lab folder.",
+                         "Meoware EDU - lab folder");
+          }
+          return 0;
       }
       break;
     case WM_MEASUREITEM:
@@ -939,7 +959,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
         return TRUE;
       }
       if (wparam == ID_RUN || wparam == ID_RESTORE || wparam == ID_NOTE || wparam == ID_TRANSFER ||
-          wparam == ID_RECEIPT || wparam == ID_VIEW) {
+          wparam == ID_RECEIPT || wparam == ID_VIEW || wparam == ID_OPEN_LAB) {
         draw_button((const DRAWITEMSTRUCT *)lparam);
         return TRUE;
       }

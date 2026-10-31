@@ -9,6 +9,16 @@
 #define A51_IV_SIZE 3U
 #define A51_FRAME_MASK UINT32_C(0x3fffff)
 
+typedef struct {
+  uint32_t state[3];
+  bool initialized;
+} A51Stream;
+
+bool a51_stream_init(A51Stream *stream, const uint8_t key[A51_KEY_SIZE], uint32_t frame);
+bool a51_stream_crypt(A51Stream *stream, const uint8_t *input, size_t length, uint8_t *output,
+                      size_t capacity, size_t *written);
+void a51_stream_close(A51Stream *stream);
+
 /* A5/1 initialization: key byte 0 first, bits LSB first; raw 22-bit COUNT.
  * File adaptation: continuous MSB-first keystream after initialization, no
  * GSM burst framing or padding. The same operation encrypts and decrypts.

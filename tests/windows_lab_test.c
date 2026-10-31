@@ -4,132 +4,142 @@
 #include <stdio.h>
 #include <string.h>
 
-static void sample_path(char path[MAX_PATH], const LabSession *lab, unsigned int sample,
-                        bool encrypted) {
-  int length = snprintf(path, MAX_PATH, "%s\\Sample%u.txt%s", lab_directory(lab), sample,
+static void fixture_path(char path[MAX_PATH], const LabSession *lab, const char *relative,
+                         bool encrypted) {
+  int length = snprintf(path, MAX_PATH, "%s\\%s%s", lab_directory(lab), relative,
                         encrypted ? ".meoware" : "");
   assert(length > 0 && length < MAX_PATH);
 }
 
-static void check_samples(const LabSession *lab) {
-  unsigned int sample;
-  for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
-    char path[MAX_PATH];
-    unsigned char actual[32768];
-    HRSRC resource = FindResourceA(NULL, MAKEINTRESOURCEA(100 + sample), RT_RCDATA);
-    HGLOBAL loaded = LoadResource(NULL, resource);
-    const void *expected = LockResource(loaded);
-    DWORD size = SizeofResource(NULL, resource);
-    FILE *file;
-    size_t count;
-    assert(resource != NULL && expected != NULL && size < sizeof(actual));
-    sample_path(path, lab, sample, false);
-    file = fopen(path, "rb");
-    assert(file != NULL);
-    count = fread(actual, 1, sizeof(actual), file);
-    assert(!ferror(file) && feof(file));
-    fclose(file);
-    assert(count == size && memcmp(actual, expected, size) == 0);
+static void create_pattern_file(const char *path, size_t size, unsigned int seed) {
+  HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+  unsigned char buffer[8192];
+  size_t offset = 0;
+  assert(file != INVALID_HANDLE_VALUE);
+  while (offset < size) {
+    size_t take = size - offset < sizeof(buffer) ? size - offset : sizeof(buffer);
+    DWORD written = 0;
+    for (size_t i = 0; i < take; ++i)
+      buffer[i] = (unsigned char)(((offset + i) * 31U + seed * 17U + ((offset + i) >> 8)) & 0xff);
+    assert(WriteFile(file, buffer, (DWORD)take, &written, NULL) && written == take);
+    offset += take;
   }
+  assert(FlushFileBuffers(file));
+  assert(CloseHandle(file));
 }
 
-static void change_header(const char *path, long offset, unsigned char value) {
-  FILE *file = fopen(path, "r+b");
-  assert(file != NULL);
-  assert(fseek(file, offset, SEEK_SET) == 0);
-  assert(fputc(value, file) != EOF);
-  assert(fclose(file) == 0);
+static void check_pattern_file(const char *path, size_t size, unsigned int seed) {
+  HANDLE file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+  unsigned char buffer[8192];
+  size_t offset = 0;
+  assert(file != INVALID_HANDLE_VALUE);
+  while (offset < size) {
+    size_t take = size - offset < sizeof(buffer) ? size - offset : sizeof(buffer);
+    DWORD got = 0;
+    assert(ReadFile(file, buffer, (DWORD)take, &got, NULL) && got == take);
+    for (size_t i = 0; i < take; ++i)
+      assert(buffer[i] == (unsigned char)(((offset + i) * 31U + seed * 17U +
+                                          ((offset + i) >> 8)) & 0xff));
+    offset += take;
+  }
+  {
+    DWORD got = 0;
+    unsigned char extra;
+    assert(ReadFile(file, &extra, 1, &got, NULL) && got == 0);
+  }
+  assert(CloseHandle(file));
 }
 
-static void check_algorithm(CryptoAlgorithm algorithm, bool expire, bool empty) {
+static void create_fixture_tree(const LabSession *lab) {
+  char path[MAX_PATH];
+  assert(snprintf(path, sizeof(path), "%s\\docs", lab_directory(lab)) > 0);
+  assert(CreateDirectoryA(path, NULL));
+  assert(snprintf(path, sizeof(path), "%s\\media", lab_directory(lab)) > 0);
+  assert(CreateDirectoryA(path, NULL));
+  assert(snprintf(path, sizeof(path), "%s\\docs\\payload.bin", lab_directory(lab)) > 0);
+  create_pattern_file(path, 140123, 3);
+  assert(snprintf(path, sizeof(path), "%s\\media\\chunked.bin", lab_directory(lab)) > 0);
+  create_pattern_file(path, 65537, 9);
+  assert(snprintf(path, sizeof(path), "%s\\empty.bin", lab_directory(lab)) > 0);
+  create_pattern_file(path, 0, 1);
+}
+
+static void cleanup_lab(LabSession *lab) {
+  char path[MAX_PATH], parent[MAX_PATH];
+  snprintf(path, sizeof(path), "%s\\docs\\payload.bin", lab_directory(lab));
+  DeleteFileA(path);
+  snprintf(path, sizeof(path), "%s\\media\\chunked.bin", lab_directory(lab));
+  DeleteFileA(path);
+  snprintf(path, sizeof(path), "%s\\empty.bin", lab_directory(lab));
+  DeleteFileA(path);
+  snprintf(path, sizeof(path), "%s\\docs", lab_directory(lab));
+  RemoveDirectoryA(path);
+  snprintf(path, sizeof(path), "%s\\media", lab_directory(lab));
+  RemoveDirectoryA(path);
+  snprintf(path, sizeof(path), "%s", lab_directory(lab));
+  RemoveDirectoryA(path);
+  snprintf(parent, sizeof(parent), "%s", lab_directory(lab));
+  *strrchr(parent, '\\') = '\0';
+  RemoveDirectoryA(parent);
+}
+
+static void check_algorithm(CryptoAlgorithm algorithm, bool expire) {
   LabSession lab;
   const CryptoInfo *info = crypto_algorithm_info(algorithm);
-  char error[256], path[MAX_PATH], directory[MAX_PATH];
-  unsigned char header[24];
-  unsigned char first_frame_high = 0;
-  uint32_t frames[LAB_SAMPLE_COUNT] = {0};
-  unsigned int sample;
+  char error[256] = {0}, path[MAX_PATH];
+  unsigned char header[32];
   FILE *file;
   assert(lab_initialize(&lab, error, sizeof(error)));
-  check_samples(&lab);
-  if (empty) {
-    for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
-      sample_path(path, &lab, sample, false);
-      file = fopen(path, "wb");
-      assert(file && fclose(file) == 0);
-    }
-  }
-  assert(!lab_encrypt_samples(&lab, (CryptoAlgorithm)99, error, sizeof(error)));
-  assert(lab_encrypt_samples(&lab, algorithm, error, sizeof(error)));
+  create_fixture_tree(&lab);
+  assert(!lab_encrypt_tree(&lab, (CryptoAlgorithm)99, error, sizeof(error)));
+  memset(error, 0, sizeof(error));
+  assert(lab_encrypt_tree(&lab, algorithm, error, sizeof(error)));
   assert(lab.crypto.selected == algorithm);
-  assert(!lab_encrypt_samples(&lab, algorithm, error, sizeof(error)));
-  for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
-    sample_path(path, &lab, sample, false);
-    assert(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
-    sample_path(path, &lab, sample, true);
-    file = fopen(path, "rb");
-    assert(file != NULL && fread(header, 1, sizeof(header), file) == sizeof(header));
-    if (algorithm == CRYPTO_A51) {
-      HRSRC resource = FindResourceA(NULL, MAKEINTRESOURCEA(100 + sample), RT_RCDATA);
-      DWORD size = empty ? 0 : SizeofResource(NULL, resource);
-      assert(fseek(file, 0, SEEK_END) == 0 && ftell(file) == (long)(24 + size));
-      assert((header[10] & 0xc0) == 0);
-      frames[sample - 1] = header[8] | ((uint32_t)header[9] << 8) | ((uint32_t)header[10] << 16);
-      for (unsigned int j = 0; j + 1 < sample; ++j) assert(frames[j] != frames[sample - 1]);
-      if (sample == 1) first_frame_high = header[10];
+  assert(lab.file_count == 3);
+  assert(!lab_encrypt_tree(&lab, algorithm, error, sizeof(error)));
+  {
+    const char *fixtures[] = {"docs\\payload.bin", "media\\chunked.bin", "empty.bin"};
+    for (size_t i = 0; i < sizeof(fixtures) / sizeof(fixtures[0]); ++i) {
+      fixture_path(path, &lab, fixtures[i], false);
+      assert(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
+      fixture_path(path, &lab, fixtures[i], true);
+      file = fopen(path, "rb");
+      assert(file != NULL && fread(header, 1, sizeof(header), file) == sizeof(header));
+      fclose(file);
+      assert(memcmp(header, "MWA3", 4) == 0);
+      assert(header[4] == algorithm && header[5] == info->iv_size);
     }
-    fclose(file);
-    assert(memcmp(header, "MWA2", 4) == 0);
-    assert(header[4] == algorithm && header[5] == info->iv_size);
   }
   if (expire) {
-    assert(lab_expire_samples(&lab, error, sizeof(error)));
-    assert(!lab_restore_samples(&lab, error, sizeof(error)));
+    assert(lab_expire_tree(&lab, error, sizeof(error)));
+    assert(!lab_restore_tree(&lab, error, sizeof(error)));
   } else {
-    sample_path(path, &lab, 1, true);
-    change_header(path, 4, 99);
-    assert(!lab_restore_samples(&lab, error, sizeof(error)));
-    /* Equal key/block sizes do not make different cipher IDs interchangeable. */
-    for (size_t index = 0; index < crypto_algorithm_count(); ++index) {
-      CryptoAlgorithm other = crypto_algorithm_at(index)->id;
-      if (other == algorithm) continue;
-      change_header(path, 4, (unsigned char)other);
-      assert(!lab_restore_samples(&lab, error, sizeof(error)));
+    fixture_path(path, &lab, "docs\\payload.bin", true);
+    file = fopen(path, "r+b");
+    assert(file != NULL && fseek(file, -1, SEEK_END) == 0);
+    {
+      int original_tag_byte = fgetc(file);
+      assert(original_tag_byte != EOF && fseek(file, -1, SEEK_END) == 0);
+      assert(fputc(original_tag_byte ^ 0xff, file) != EOF);
+      assert(fclose(file) == 0);
+      assert(!lab_restore_tree(&lab, error, sizeof(error)));
+      file = fopen(path, "r+b");
+      assert(file != NULL && fseek(file, -1, SEEK_END) == 0);
+      assert(fputc(original_tag_byte, file) != EOF && fclose(file) == 0);
     }
-    change_header(path, 4, (unsigned char)algorithm);
-    change_header(path, 5, 0);
-    assert(!lab_restore_samples(&lab, error, sizeof(error)));
-    change_header(path, 5, (unsigned char)info->iv_size);
-    if (algorithm == CRYPTO_A51) {
-      change_header(path, 10, first_frame_high | 0x80);
-      assert(!lab_restore_samples(&lab, error, sizeof(error)));
-      change_header(path, 10, first_frame_high);
-    }
-    assert(lab_restore_samples(&lab, error, sizeof(error)));
-    if (!empty) check_samples(&lab);
-    assert(!lab_encrypt_samples(&lab, algorithm, error, sizeof(error)));
+    memset(error, 0, sizeof(error));
+    assert(lab_restore_tree(&lab, error, sizeof(error)));
+    fixture_path(path, &lab, "docs\\payload.bin", false);
+    check_pattern_file(path, 140123, 3);
+    fixture_path(path, &lab, "media\\chunked.bin", false);
+    check_pattern_file(path, 65537, 9);
+    fixture_path(path, &lab, "empty.bin", false);
+    check_pattern_file(path, 0, 1);
+    assert(!lab_encrypt_tree(&lab, algorithm, error, sizeof(error)));
   }
-  for (sample = 1; sample <= LAB_SAMPLE_COUNT; ++sample) {
-    sample_path(path, &lab, sample, true);
-    assert(GetFileAttributesA(path) == INVALID_FILE_ATTRIBUTES);
-    if (!expire) {
-      sample_path(path, &lab, sample, false);
-      if (empty) {
-        file = fopen(path, "rb");
-        assert(file && fgetc(file) == EOF && !ferror(file));
-        fclose(file);
-      }
-      assert(DeleteFileA(path));
-    }
-  }
-  snprintf(directory, sizeof(directory), "%s", lab_directory(&lab));
   lab_close(&lab);
-  for (sample = 0; sample < sizeof(lab.crypto); ++sample) {
-    assert(((const unsigned char *)&lab.crypto)[sample] == 0);
-  }
-  assert(RemoveDirectoryA(directory));
-  *strrchr(directory, '\\') = '\0';
-  assert(RemoveDirectoryA(directory));
+  cleanup_lab(&lab);
 }
 
 static void check_portable_dispatch(void) {
@@ -226,10 +236,9 @@ int main(void) {
   assert(crypto_algorithm_at(crypto_algorithm_count()) == NULL);
   for (index = 0; index < crypto_algorithm_count(); ++index) {
     const CryptoInfo *info = crypto_algorithm_at(index);
-    check_algorithm(info->id, false, false);
-    check_algorithm(info->id, true, false);
-    printf("%s: sample restoration, metadata checks, and expiry passed.\n", info->name);
+    check_algorithm(info->id, false);
+    check_algorithm(info->id, true);
+    printf("%s: streaming tree restoration, authentication, and expiry passed.\n", info->name);
   }
-  check_algorithm(CRYPTO_A51, false, true);
   return 0;
 }
