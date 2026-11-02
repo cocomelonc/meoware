@@ -17,6 +17,7 @@ _Static_assert(CAMELLIA_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit
 _Static_assert(SPECK_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit Speck");
 _Static_assert(MARS_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit MARS");
 _Static_assert(SAFER_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit SAFER");
+_Static_assert(FEAL8_KEY_SIZE <= TEA_KEY_SIZE, "Portable key storage must fit FEAL-8");
 
 static const CryptoInfo algorithms[] = {
     {CRYPTO_AES256_CBC, "AES-256-CBC", AES_KEY_SIZE, AES_BLOCK_SIZE, AES_BLOCK_SIZE},
@@ -31,7 +32,8 @@ static const CryptoInfo algorithms[] = {
      CAMELLIA_BLOCK_SIZE},
     {CRYPTO_SPECK128_CBC, "Speck-128-CBC", SPECK_KEY_SIZE, SPECK_BLOCK_SIZE, SPECK_BLOCK_SIZE},
     {CRYPTO_MARS128_CBC, "MARS-128-CBC", MARS_KEY_SIZE, MARS_BLOCK_SIZE, MARS_BLOCK_SIZE},
-    {CRYPTO_SAFERK64_CBC, "SAFER-K64-CBC", SAFER_KEY_SIZE, SAFER_BLOCK_SIZE, SAFER_BLOCK_SIZE}};
+    {CRYPTO_SAFERK64_CBC, "SAFER-K64-CBC", SAFER_KEY_SIZE, SAFER_BLOCK_SIZE, SAFER_BLOCK_SIZE},
+    {CRYPTO_FEAL8_CBC, "FEAL-8-CBC", FEAL8_KEY_SIZE, FEAL8_BLOCK_SIZE, FEAL8_BLOCK_SIZE}};
 
 size_t crypto_algorithm_count(void) {
   return sizeof(algorithms) / sizeof(algorithms[0]);
@@ -71,6 +73,8 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
       goto failure;
     if (selected == CRYPTO_SAFERK64_CBC)
       safer_expand_key(context->portable_key, context->safer_schedule);
+    if (selected == CRYPTO_FEAL8_CBC)
+      feal8_expand_key(context->portable_key, context->feal8_schedule);
     context->initialized = true;
     return true;
   }
@@ -186,6 +190,10 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
       transform = encrypt ? safer_encrypt_prepared : safer_decrypt_prepared;
       transform_key = context->safer_schedule;
       break;
+    case CRYPTO_FEAL8_CBC:
+      transform = encrypt ? feal8_encrypt_prepared : feal8_decrypt_prepared;
+      transform_key = context->feal8_schedule;
+      break;
     default:
       break;
   }
@@ -269,6 +277,10 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
     case CRYPTO_SAFERK64_CBC:
       transform = encrypt ? safer_encrypt_prepared : safer_decrypt_prepared;
       transform_key = context->safer_schedule;
+      break;
+    case CRYPTO_FEAL8_CBC:
+      transform = encrypt ? feal8_encrypt_prepared : feal8_decrypt_prepared;
+      transform_key = context->feal8_schedule;
       break;
     case CRYPTO_AES256_CBC:
       if (context->key == NULL) return false;

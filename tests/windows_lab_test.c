@@ -190,7 +190,11 @@ static void check_portable_dispatch(void) {
                {CRYPTO_SAFERK64_CBC,
                 {8, 7, 6, 5, 4, 3, 2, 1},
                 {1, 2, 3, 4, 5, 6, 7, 8},
-                {0xc8, 0xf2, 0x9c, 0xdd, 0x87, 0x78, 0x3e, 0xd9}}};
+                {0xc8, 0xf2, 0x9c, 0xdd, 0x87, 0x78, 0x3e, 0xd9}},
+               {CRYPTO_FEAL8_CBC,
+                {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef},
+                {0},
+                {0xce, 0xef, 0x2c, 0x86, 0xf2, 0x49, 0x07, 0x52}}};
   for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
     unsigned char iv[16] = {0}, encrypted[32], restored[32];
     ULONG block_size = crypto_algorithm_info(cases[i].algorithm)->block_size;
@@ -200,6 +204,8 @@ static void check_portable_dispatch(void) {
     memcpy(context.portable_key, cases[i].key, sizeof(cases[i].key));
     if (cases[i].algorithm == CRYPTO_SAFERK64_CBC)
       safer_expand_key(context.portable_key, context.safer_schedule);
+    if (cases[i].algorithm == CRYPTO_FEAL8_CBC)
+      feal8_expand_key(context.portable_key, context.feal8_schedule);
     assert(crypto_encrypt(&context, iv, cases[i].plain, block_size, encrypted, sizeof(encrypted),
                           &encrypted_size));
     assert(encrypted_size == 2 * block_size &&
@@ -238,6 +244,8 @@ static void check_portable_dispatch(void) {
     crypto_close(&context);
     for (size_t byte = 0; byte < sizeof(context.safer_schedule); ++byte)
       assert(context.safer_schedule[byte] == 0);
+    for (size_t byte = 0; byte < sizeof(context.feal8_schedule); ++byte)
+      assert(context.feal8_schedule[byte] == 0);
   }
 }
 

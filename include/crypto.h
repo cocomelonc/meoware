@@ -16,6 +16,7 @@
 #include "speck.h"
 #include "mars.h"
 #include "safer.h"
+#include "feal8.h"
 
 #define CRYPTO_MAX_BLOCK_SIZE 16U
 #define CRYPTO_MAC_SIZE 32U
@@ -31,7 +32,8 @@ typedef enum {
   CRYPTO_CAMELLIA128_CBC = 8,
   CRYPTO_SPECK128_CBC = 9,
   CRYPTO_MARS128_CBC = 10,
-  CRYPTO_SAFERK64_CBC = 11
+  CRYPTO_SAFERK64_CBC = 11,
+  CRYPTO_FEAL8_CBC = 12
 } CryptoAlgorithm;
 
 typedef struct {
@@ -51,6 +53,7 @@ typedef struct {
   bool initialized;
   unsigned char portable_key[TEA_KEY_SIZE];
   unsigned char safer_schedule[SAFER_SCHEDULE_SIZE];
+  unsigned char feal8_schedule[FEAL8_SCHEDULE_SIZE];
   BCRYPT_ALG_HANDLE algorithm;
   BCRYPT_KEY_HANDLE key;
   unsigned char *key_object;
