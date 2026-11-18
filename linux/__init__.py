@@ -1,0 +1,1 @@
+"""Meoware Linux desktop laboratory."""

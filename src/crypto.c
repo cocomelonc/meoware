@@ -4,6 +4,12 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <limits.h>
+#include <openssl/core_names.h>
+#include <openssl/params.h>
+#include <openssl/rand.h>
+#endif
 
 #define AES_KEY_SIZE 32
 #define AES_BLOCK_SIZE 16
@@ -52,20 +58,28 @@ const CryptoInfo *crypto_algorithm_info(CryptoAlgorithm id) {
 }
 
 bool crypto_random(unsigned char *buffer, ULONG length) {
+#ifdef _WIN32
   return buffer != NULL &&
          BCRYPT_SUCCESS(BCryptGenRandom(NULL, buffer, length, BCRYPT_USE_SYSTEM_PREFERRED_RNG));
+#else
+  return buffer != NULL && length <= INT_MAX && RAND_bytes(buffer, (int)length) == 1;
+#endif
 }
 
 bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
+#ifdef _WIN32
   NTSTATUS status;
   ULONG result_size = 0;
   unsigned char key_bytes[AES_KEY_SIZE];
+#endif
 
   if (context == NULL) {
     return false;
   }
   memset(context, 0, sizeof(*context));
+#ifdef _WIN32
   memset(key_bytes, 0, sizeof(key_bytes));
+#endif
   if (crypto_algorithm_info(selected) == NULL) return false;
   context->selected = selected;
   if (selected != CRYPTO_AES256_CBC) {
@@ -79,6 +93,7 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
     return true;
   }
 
+#ifdef _WIN32
   status = BCryptOpenAlgorithmProvider(&context->algorithm, BCRYPT_AES_ALGORITHM, NULL, 0);
   if (!BCRYPT_SUCCESS(status)) {
     goto failure;
@@ -108,11 +123,23 @@ bool crypto_init(CryptoContext *context, CryptoAlgorithm selected) {
   if (!BCRYPT_SUCCESS(status)) {
     goto failure;
   }
+#else
+  if (!crypto_random(context->aes_key, sizeof(context->aes_key))) goto failure;
+  context->aes_encrypt = EVP_CIPHER_CTX_new();
+  context->aes_decrypt = EVP_CIPHER_CTX_new();
+  if (context->aes_encrypt == NULL || context->aes_decrypt == NULL ||
+      EVP_EncryptInit_ex(context->aes_encrypt, EVP_aes_256_ecb(), NULL, context->aes_key, NULL) != 1 ||
+      EVP_DecryptInit_ex(context->aes_decrypt, EVP_aes_256_ecb(), NULL, context->aes_key, NULL) != 1 ||
+      EVP_CIPHER_CTX_set_padding(context->aes_encrypt, 0) != 1 ||
+      EVP_CIPHER_CTX_set_padding(context->aes_decrypt, 0) != 1) goto failure;
+#endif
   context->initialized = true;
   return true;
 
 failure:
+#ifdef _WIN32
   SecureZeroMemory(key_bytes, sizeof(key_bytes));
+#endif
   crypto_close(context);
   return false;
 }
@@ -121,6 +148,7 @@ void crypto_close(CryptoContext *context) {
   if (context == NULL) {
     return;
   }
+#ifdef _WIN32
   if (context->key != NULL) {
     BCryptDestroyKey(context->key);
     context->key = NULL;
@@ -134,14 +162,20 @@ void crypto_close(CryptoContext *context) {
     BCryptCloseAlgorithmProvider(context->algorithm, 0);
     context->algorithm = NULL;
   }
+#else
+  EVP_CIPHER_CTX_free(context->aes_encrypt);
+  EVP_CIPHER_CTX_free(context->aes_decrypt);
+#endif
   SecureZeroMemory(context, sizeof(*context));
 }
 
 static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned char iv[16],
                          const unsigned char *input, ULONG input_size, unsigned char *output,
                          ULONG output_capacity, ULONG *output_size) {
+#ifdef _WIN32
   unsigned char iv_copy[AES_BLOCK_SIZE];
   NTSTATUS status;
+#endif
   CbcBlockTransform transform = NULL;
   const unsigned char *transform_key;
 
@@ -207,8 +241,10 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
     if (success) *output_size = (ULONG)written;
     return success;
   }
-  if (context->selected != CRYPTO_AES256_CBC || context->key == NULL) return false;
+  if (context->selected != CRYPTO_AES256_CBC) return false;
 
+#ifdef _WIN32
+  if (context->key == NULL) return false;
   memcpy(iv_copy, iv, sizeof(iv_copy));
   if (encrypt) {
     status = BCryptEncrypt(context->key, (PUCHAR)input, input_size, NULL, iv_copy, sizeof(iv_copy),
@@ -224,6 +260,21 @@ static bool crypt_buffer(CryptoContext *context, bool encrypt, const unsigned ch
 
   SecureZeroMemory(iv_copy, sizeof(iv_copy));
   return BCRYPT_SUCCESS(status);
+#else
+  if (input_size > INT_MAX - AES_BLOCK_SIZE || output_capacity < input_size ||
+      (encrypt && (uint64_t)input_size / AES_BLOCK_SIZE * AES_BLOCK_SIZE + AES_BLOCK_SIZE > output_capacity))
+    return false;
+  EVP_CIPHER_CTX *cipher = EVP_CIPHER_CTX_new();
+  int written = 0, final_size = 0;
+  if (cipher == NULL) return false;
+  bool ok = EVP_CipherInit_ex(cipher, EVP_aes_256_cbc(), NULL, context->aes_key, iv, encrypt) == 1 &&
+            EVP_CipherUpdate(cipher, output, &written, input, (int)input_size) == 1 &&
+            EVP_CipherFinal_ex(cipher, output + written, &final_size) == 1;
+  EVP_CIPHER_CTX_free(cipher);
+  if (ok) *output_size = (ULONG)(written + final_size);
+  else SecureZeroMemory(output, output_capacity);
+  return ok;
+#endif
 }
 
 bool crypto_encrypt(CryptoContext *context, const unsigned char iv[16], const unsigned char *input,
@@ -243,9 +294,11 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
   CbcBlockTransform transform = NULL;
   const unsigned char *transform_key;
   unsigned char result[CRYPTO_MAX_BLOCK_SIZE];
+#ifdef _WIN32
   unsigned char zero_iv[CRYPTO_MAX_BLOCK_SIZE] = {0};
   ULONG result_size = 0;
   NTSTATUS status;
+#endif
 
   if (context == NULL || !context->initialized || block == NULL) return false;
   transform_key = context->portable_key;
@@ -283,6 +336,7 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
       transform_key = context->feal8_schedule;
       break;
     case CRYPTO_AES256_CBC:
+#ifdef _WIN32
       if (context->key == NULL) return false;
       status = encrypt ? BCryptEncrypt(context->key, block, AES_BLOCK_SIZE, NULL, zero_iv,
                                        sizeof(zero_iv), result, AES_BLOCK_SIZE, &result_size, 0)
@@ -296,6 +350,19 @@ static bool crypto_transform_block(CryptoContext *context, bool encrypt,
       memcpy(block, result, AES_BLOCK_SIZE);
       SecureZeroMemory(result, sizeof(result));
       SecureZeroMemory(zero_iv, sizeof(zero_iv));
+#else
+      {
+        int size = 0;
+        int ok = encrypt ? EVP_EncryptUpdate(context->aes_encrypt, result, &size, block, AES_BLOCK_SIZE)
+                         : EVP_DecryptUpdate(context->aes_decrypt, result, &size, block, AES_BLOCK_SIZE);
+        if (ok != 1 || size != AES_BLOCK_SIZE) {
+          SecureZeroMemory(result, sizeof(result));
+          return false;
+        }
+        memcpy(block, result, AES_BLOCK_SIZE);
+        SecureZeroMemory(result, sizeof(result));
+      }
+#endif
       return true;
     default:
       return false;
@@ -480,10 +547,13 @@ void crypto_stream_close(CryptoStream *stream) {
 }
 
 bool crypto_mac_init(CryptoMacContext *context, const unsigned char *key, ULONG key_size) {
+#ifdef _WIN32
   ULONG result_size = 0;
   NTSTATUS status;
+#endif
   if (context == NULL || key == NULL || key_size == 0) return false;
   memset(context, 0, sizeof(*context));
+#ifdef _WIN32
   status = BCryptOpenAlgorithmProvider(&context->algorithm, BCRYPT_SHA256_ALGORITHM, NULL,
                                        BCRYPT_ALG_HANDLE_HMAC_FLAG);
   if (!BCRYPT_SUCCESS(status)) goto failure;
@@ -496,6 +566,16 @@ bool crypto_mac_init(CryptoMacContext *context, const unsigned char *key, ULONG 
   status = BCryptCreateHash(context->algorithm, &context->hash, context->object,
                             context->object_size, (PUCHAR)key, key_size, 0);
   if (!BCRYPT_SUCCESS(status)) goto failure;
+#else
+  char digest[] = "SHA256";
+  OSSL_PARAM parameters[] = {OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, digest, 0),
+                             OSSL_PARAM_construct_end()};
+  context->algorithm = EVP_MAC_fetch(NULL, "HMAC", NULL);
+  if (context->algorithm == NULL) goto failure;
+  context->hash = EVP_MAC_CTX_new(context->algorithm);
+  if (context->hash == NULL || EVP_MAC_init(context->hash, key, key_size, parameters) != 1)
+    goto failure;
+#endif
   context->initialized = true;
   return true;
 
@@ -506,16 +586,26 @@ failure:
 
 bool crypto_mac_update(CryptoMacContext *context, const unsigned char *data, ULONG size) {
   if (context == NULL || !context->initialized || (data == NULL && size != 0)) return false;
+#ifdef _WIN32
   return BCRYPT_SUCCESS(BCryptHashData(context->hash, (PUCHAR)data, size, 0));
+#else
+  return EVP_MAC_update(context->hash, data, size) == 1;
+#endif
 }
 
 bool crypto_mac_final(CryptoMacContext *context, unsigned char mac[CRYPTO_MAC_SIZE]) {
   if (context == NULL || !context->initialized || mac == NULL) return false;
+#ifdef _WIN32
   return BCRYPT_SUCCESS(BCryptFinishHash(context->hash, mac, CRYPTO_MAC_SIZE, 0));
+#else
+  size_t written = 0;
+  return EVP_MAC_final(context->hash, mac, &written, CRYPTO_MAC_SIZE) == 1 && written == CRYPTO_MAC_SIZE;
+#endif
 }
 
 void crypto_mac_close(CryptoMacContext *context) {
   if (context == NULL) return;
+#ifdef _WIN32
   if (context->hash != NULL) {
     BCryptDestroyHash(context->hash);
     context->hash = NULL;
@@ -529,5 +619,9 @@ void crypto_mac_close(CryptoMacContext *context) {
     BCryptCloseAlgorithmProvider(context->algorithm, 0);
     context->algorithm = NULL;
   }
+#else
+  EVP_MAC_CTX_free(context->hash);
+  EVP_MAC_free(context->algorithm);
+#endif
   SecureZeroMemory(context, sizeof(*context));
 }

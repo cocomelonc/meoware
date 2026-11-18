@@ -6,7 +6,7 @@
 
 This PoC based on [malware and cryptography series](https://cocomelonc.github.io/malware/2026/03/05/malware-cryptography-44.html) from my [blog](https://cocomelonc.github.io/)    
 
-Meoware EDU is a standalone C/Win32 ransomware behavior lab for educational and defensive research. It creates an empty, unique temporary lab folder. The operator places disposable corpus files there, and the GUI recursively processes regular files under that folder with the selected educational cipher. File I/O uses fixed-size buffers; memory use does not grow with file size. Restore uses the session key and per-file authenticated records held by the current process. The optional deadline scenario removes only the encrypted records created by that lab session.
+Meoware EDU is a ransomware behavior lab for Windows and Linux, with shared C cipher implementations and desktop interfaces. It creates an empty, unique temporary lab folder. The operator places disposable corpus files there, and the GUI recursively processes regular files under that folder with the selected educational cipher. File I/O uses fixed-size buffers; memory use does not grow with file size. Restore uses the session key and per-file authenticated records held by the current process. The optional deadline scenario removes only the encrypted records created by that lab session.
 
 ![img](./screenshots/1.png)    
 
@@ -14,7 +14,15 @@ The lab directory is created under the current user's Windows temporary director
 
 Early versions of my lab embeds or assumes a fixed sample list.    
 Now uses a generated corpus.    
-The corpus can be generated separately and copied into the displayed lab folder. The C implementation separates the Win32 UI, lab workflow, cipher dispatch, portable cipher modules, and receipt flow. AES, random key/IV generation, and HMAC-SHA-256 use Windows CNG.
+The corpus can be generated separately and copied into the displayed lab folder. The C implementation separates the lab workflow, cipher dispatch, portable cipher modules, and receipt flow. AES, random key/IV generation, and HMAC-SHA-256 use Windows CNG on Windows and OpenSSL 3 on Linux. Linux uses a C/POSIX file engine with a Python/Tkinter GUI.
+
+## Linux GUI
+
+The Linux desktop supports all 12 cipher profiles, the same generated corpus, authenticated MWA3 records, a countdown, local restoration, and the Telegram API meowcoins approval flow. It creates a private temporary lab and provides **Load demo corpus**, **Open lab folder**, **Run demo**, **Restore lab**, and **New session** controls.
+
+![Linux GUI](./screenshots/linux-ready.png)
+
+Build/run commands, real GUI captures, and measured test results: [Linux documentation](linux/README.md).
 
 ## generate a corpus on Linux
 
@@ -78,7 +86,7 @@ x86_64-w64-mingw32-windres -i src/assets.rc -O coff -o meoware-assets.o
 x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Wpedantic \
   -Iinclude -mwindows -o meoware.exe \
   src/main.c src/lab.c src/crypto.c src/tea.c src/xtea.c src/rc5.c src/rc6.c \
-  src/a51.c src/skipjack.c src/camellia.c src/speck.c src/mars.c src/safer.c src/cbc.c \
+  src/a51.c src/skipjack.c src/camellia.c src/speck.c src/mars.c src/safer.c src/feal8.c src/cbc.c \
   src/telegram.c src/approval.c src/json.c meoware-assets.o \
   -lbcrypt -luser32 -lgdi32 -lwinhttp -lshell32
 ```

@@ -2,3 +2,4 @@ meoware-assets.o
 /bot/config.json
 /datasets/corpora/
 __pycache__/
+/linux/build/

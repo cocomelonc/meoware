@@ -1,0 +1,60 @@
+{
+  "checked_at_utc": "2026-11-18T07:34:57.953305+00:00",
+  "platform": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "python": "3.13.5",
+    "openssl": "OpenSSL 3.5.5 27 Jan 2026 (Library: OpenSSL 3.5.5 27 Jan 2026)",
+    "compiler": "gcc (Debian 14.2.0-19) 14.2.0"
+  },
+  "baseline_commit": "2e8f4c4096c6b2e8228e1d53e1b28da0d1403b44",
+  "library_sha256": "94cf4be5bb7c5b3650923318820e20458e56b8b2cd8dc7a1a9d4facfa7bad43d",
+  "corpus": {
+    "corpus_id": "5ff3b6f85d8166a7df24291ae82e0a5d72a0fedf4f480e5963183a97c18de93a",
+    "files": 24,
+    "payload_bytes": 534526,
+    "manifest_sha256": "1e151c0cafa63c25f8a99dedb31e8928799c4347d1137469bca8ee45f2921a34"
+  },
+  "checks": {
+    "python_tests": 21,
+    "real_x11_gui_tests": 3,
+    "cipher_profiles_restored_against_original_manifest": 12,
+    "native_sanitizers": [
+      "AddressSanitizer",
+      "UndefinedBehaviorSanitizer",
+      "LeakSanitizer"
+    ],
+    "independent_known_answers": [
+      "NIST SP 800-38A AES-256-CBC F.2.5 first block",
+      "RFC 4231 HMAC-SHA-256 test case 1"
+    ],
+    "native_streaming_restoration_profiles": 12,
+    "portable_cipher_test_suites": 11,
+    "portable_approval_json_suite": "passed",
+    "windows_integration_cross_compile": "passed",
+    "windows_runtime_this_run": "not_run",
+    "cross_platform_session_transfer": "not_run",
+    "telegram_mock_flow": "passed",
+    "telegram_live_delivery": "not_run"
+  },
+  "captures": {
+    "screenshots/linux-encrypted.png": "65f7d0e77bfd3634ac9f37c43bd656da9f2d1cd05de38a1d033b495688c75a0d",
+    "screenshots/linux-ready.png": "1d43e59255be5b410090dad7cc7ec01d95f052047bd05a3bc052548fa672a589",
+    "screenshots/linux-restored.png": "873fcc3d271d87c606ffb872faf1c11facd4e5b58b3d3a18963b8ca05a7d72b8"
+  },
+  "source_sha256": {
+    "include/crypto.h": "778783aff3e74f5106573247ab48650744ccd9a1284e892dbc55f0c5cd843be5",
+    "include/linux_lab.h": "ec268e7b5b32323e785b92224bd2dc0c37d7bce2146afec0427d83acfba08b52",
+    "src/crypto.c": "7a12983913590ec832f6853f39484592f923d82951d53d0db5c1e12ca010d2a5",
+    "src/linux_lab.c": "345a8583700ae053ccafbf540a9278abecf501717fab0eb76ca6892241a58820",
+    "linux/__init__.py": "8406da7d998c20bf2c636386a9e92870c3816d5a4675e5d7b506924c2dfacd48",
+    "linux/__main__.py": "40bf6a4313b3c95f44c745748ed4fdade699b842c4a04123fced3a4699fe9b48",
+    "linux/core.py": "ff17a73eb83c815842621fee1d9c58b98903ed2bf58b43ff5733da5e5c751a44",
+    "linux/gui.py": "0b36fe95d6cd2eb66bd3c9bf3a65f4a3b8e76035bc31ced33b817e3340eb448e",
+    "linux/telegram.py": "e8738c4b17f91431284f6881285e55e52552877dff6ace8bc6e05ee54e8a9384",
+    "tests/linux/test_gui.py": "9242180750bc65d27238ae616445647026c5927ac0263fa99c83e40358a4578a",
+    "tests/linux/test_linux.py": "203240854473104b30c20c78897200ac145133c51032da2b9a3ffd83a32bdb10",
+    "tests/linux/test_telegram.py": "22b0031beb591d317c0ab1c57536785181330d249c525f79a14169245f5d9aab",
+    "tests/linux_crypto_test.c": "c844160dd1b0faf07eb58f02316d4cf6a1fc965ec8979aac81d4c490858d511e"
+  }
+}

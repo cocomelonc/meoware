@@ -4,8 +4,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <bcrypt.h>
+#else
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+typedef uint32_t ULONG;
+#define SecureZeroMemory OPENSSL_cleanse
+#endif
 #include "tea.h"
 #include "xtea.h"
 #include "rc5.h"
@@ -54,10 +61,16 @@ typedef struct {
   unsigned char portable_key[TEA_KEY_SIZE];
   unsigned char safer_schedule[SAFER_SCHEDULE_SIZE];
   unsigned char feal8_schedule[FEAL8_SCHEDULE_SIZE];
+#ifdef _WIN32
   BCRYPT_ALG_HANDLE algorithm;
   BCRYPT_KEY_HANDLE key;
   unsigned char *key_object;
   ULONG key_object_size;
+#else
+  unsigned char aes_key[32];
+  EVP_CIPHER_CTX *aes_encrypt;
+  EVP_CIPHER_CTX *aes_decrypt;
+#endif
 } CryptoContext;
 
 typedef struct {
@@ -73,10 +86,15 @@ typedef struct {
 } CryptoStream;
 
 typedef struct {
+#ifdef _WIN32
   BCRYPT_ALG_HANDLE algorithm;
   BCRYPT_HASH_HANDLE hash;
   unsigned char *object;
   ULONG object_size;
+#else
+  EVP_MAC *algorithm;
+  EVP_MAC_CTX *hash;
+#endif
   bool initialized;
 } CryptoMacContext;
 
